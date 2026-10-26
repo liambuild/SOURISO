@@ -65,3 +65,25 @@ Variable utile à la sonde : `WGPU_BACKEND=vulkan` ou `dx12` (Windows), `metal` 
 - [ ] La CI est verte sur Windows et sur macOS (format, lint, tests, compilation, frontière système).
 - [ ] `./scripts/verifier-frontiere.sh` échoue si une API système apparaît hors de `src/plateforme` (vérifié à la main avec un fichier fautif).
 - [ ] `CLAUDE.md` renseigne « Commandes de vérification » et « Points de contrôle au démarrage ».
+
+## chore/repli-surcouche-windows
+
+Surcouche Windows : DX12 avec présentation par composition (DirectComposition), choisie dans `plateforme::options_instance`. macOS inchangé. Voir `docs/ARCHITECTURE.md`, section 9.
+
+**État au moment de la livraison** : la CI compile et vérifie sur Windows et macOS, mais rien de ce qui suit n'a été exécuté par l'assistant. Tout est « non testé » jusqu'à ce que tu coches la case et indiques le résultat. Plus besoin de poser `WGPU_BACKEND` ni `WGPU_DX12_PRESENTATION_SYSTEM` : l'exécutable issu de la CI fait ce choix seul. Un lancement sans ces variables doit donc donner le même résultat que ton test.
+
+| # | Scénario (Windows) | Attendu | Windows |
+|---|---|---|---|
+| W1 | Lancement de `souriso.exe` sans variable d'environnement | `souriso-sonde.txt` : backend `Dx12`, modes alpha contenant `PreMultiplied` ou `PostMultiplied`. Pas de code de sortie 2 | non testé |
+| W2 | Transparence | Bureau visible, aucun fond noir ni blanc, aucun cadre, aucune ombre, y compris au premier affichage et après 5 minutes | non testé |
+| W3 | Clics qui traversent | Cliquer, glisser, faire défiler et cliquer droit à travers l'anneau agit sur la fenêtre dessous | non testé |
+| W4 | Droits | Compte standard : aucune invite UAC, aucune invite pare-feu | non testé |
+| W5 | Forçage du backend | `WGPU_BACKEND=vulkan` : le constat de la sonde est lisible, l'application quitte avec le code 2 sans afficher d'écran opaque (comportement attendu, Vulkan reste opaque) | non testé |
+| W6 | Fluidité (S1, S2) | Anneau sans à-coup. Décalage à noter : vidéo à 240 images/s, images d'écart entre l'anneau et le curseur | non testé |
+| W7 | Processeur (S3, S4) | Compteur de performance du processus : en mouvement continu 60 s, noter le % d'un cœur logique (seuil < 3 %). Curseur immobile 60 s : noter (seuil < 1 %) | non testé |
+| W8 | Applications en plein écran | Anneau visible au-dessus d'un diaporama, d'un navigateur en plein écran et d'un jeu en fenêtre sans bordure. Noter aussi si une vidéo plein écran en dessous change d'aspect ou saccade | non testé |
+| W9 | Mise à l'échelle (S10) | Écran à 100 % puis à 150 % : anneau centré à ± 1 px logique (écran principal) | non testé |
+| W10 | Enregistrement (S11) | OBS en capture d'écran entière : l'anneau est visible dans la vidéo. Noter la capture de fenêtre et la Barre de jeu | non testé |
+| W11 | Autre carte graphique | Si une machine à carte intégrée est disponible : mêmes scénarios W1 à W3 | non testé |
+
+Automatique : `cargo clippy --target x86_64-pc-windows-msvc` et `--target aarch64-apple-darwin` passent depuis Linux (vérification croisée, qui ne remplace pas W1 à W11).
