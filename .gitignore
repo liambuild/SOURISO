@@ -1,0 +1,19 @@
+# Rust
+/target
+
+# Systèmes
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Éditeurs
+.idea/
+.vscode/
+*.swp
+
+# Secrets : ne jamais versionner
+*.pem
+*.p12
+*.pfx
+*.key
+.env
