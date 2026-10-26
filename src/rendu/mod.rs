@@ -33,9 +33,8 @@ impl Rendu {
     /// Prépare le rendu. Échoue, avec le constat des capacités de la surface, si aucun mode
     /// de transparence n'est disponible : afficher une surface opaque cacherait l'écran.
     pub fn nouveau(fenetre: Arc<Window>, affichage: OwnedDisplayHandle) -> Result<Self, String> {
-        let instance = wgpu::Instance::new(
-            wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(affichage)),
-        );
+        let instance =
+            wgpu::Instance::new(crate::plateforme::options_instance(affichage).with_env());
         let surface = instance
             .create_surface(fenetre.clone())
             .map_err(|e| format!("création de la surface : {e}"))?;
