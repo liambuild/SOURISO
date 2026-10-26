@@ -37,4 +37,20 @@ Toute fonction qui dépend du système est soit testée sur le système concern�
 
 ## Commandes de vérification
 
+Chaîne Rust épinglée par `rust-toolchain.toml` (installation par `rustup`). Mêmes commandes en local et en CI (`.github/workflows/ci.yml`, Windows et macOS) :
+
+- `./scripts/verifier-frontiere.sh` : aucune API ni condition système hors de `src/plateforme`.
+- `cargo fmt --check`
+- `cargo clippy --all-targets --locked -- -D warnings`
+- `cargo test --locked`
+- `cargo build --release --locked`
+
+Sous Linux, l'adaptateur factice permet de compiler et de tester le cœur. Vérification croisée possible avec `cargo check --target x86_64-pc-windows-msvc` et `--target aarch64-apple-darwin` (cibles à ajouter par `rustup target add`). Elle ne remplace pas la recette sur le vrai système.
+
 ## Points de contrôle au démarrage
+
+Lecture seule :
+
+- `cargo --version` doit correspondre au canal de `rust-toolchain.toml`.
+- `./scripts/verifier-frontiere.sh` doit réussir.
+- `cargo fmt --check` doit réussir.

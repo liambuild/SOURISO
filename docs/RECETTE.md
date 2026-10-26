@@ -15,3 +15,45 @@ Ce document recense les vérifications du produit, avec le résultat par systèm
 - [ ] La section « Décision » indique la famille retenue, sa condition (sonde comparative sur Windows) et ses replis.
 - [ ] Les contraintes sont consignées : Windows et macOS, aucun droit administrateur, exigence d'esthétique, Mac indisponible pour l'instant.
 - [ ] Les affirmations propres à un système sont marquées « à vérifier » : aucune n'est testée à ce stade (Windows : non testé ; macOS : non testé).
+
+## chore/socle-multi-os
+
+Socle minimal : surcouche plein écran transparente et traversable, repère qui suit le curseur, icône pour quitter. Rendu `wgpu` (famille D). Aucun effet de clic, aucun son, aucun réglage, écran principal seulement.
+
+**État au moment de la livraison** : la CI compile et teste sur Windows et sur macOS, mais personne n'a encore lancé l'application sur un vrai système. Tout ce qui suit est « non testé » jusqu'à ce que tu coches la case et indiques le résultat.
+
+**Ce que fait la sonde (R13).** Au lancement, l'application écrit sur la sortie d'erreur une ligne `Sonde : adaptateur …, backend …, modes alpha […], modes de présentation […]`. Si aucun mode alpha transparent n'est disponible (`PreMultiplied` ou `PostMultiplied`), elle **ne montre pas la fenêtre**, affiche le constat et quitte avec le code 2 : une surface opaque cacherait l'écran. C'est le signal pour décider du repli (`docs/ARCHITECTURE.md`, section 4). Lancer depuis un terminal pour lire la ligne : `cargo run --release` (Windows : PowerShell).
+
+Variable utile à la sonde : `WGPU_BACKEND=vulkan` ou `dx12` (Windows), `metal` (macOS) force le backend. À noter dans le résultat.
+
+### Scénarios à tester par toi
+
+| # | Scénario | Attendu | Windows | macOS |
+|---|---|---|---|---|
+| 1 | Lancement : `cargo run --release` depuis un terminal | Aucune invite d'élévation (UAC). Ligne « Sonde » lisible. Pas d'entrée dans la barre des tâches (Windows) ni dans le Dock (macOS) | non testé | non testé |
+| 2 | Transparence | Le bureau reste visible, aucun fond noir ni blanc ni cadre ni ombre | non testé | non testé |
+| 3 | Repère qui suit le curseur | Un anneau jaune centré sur le curseur, qui le suit sans à-coup visible | non testé | non testé |
+| 4 | Clics qui traversent | Cliquer, double-cliquer, glisser, faire défiler et cliquer droit à travers l'anneau agit sur l'application en dessous | non testé | non testé |
+| 5 | Fermeture par l'icône | L'icône apparaît en zone de notification (Windows) ou en barre de menus (macOS). Menu « Quitter SOURISO » : l'anneau disparaît et le processus se termine (vérifier dans le Gestionnaire des tâches ou le Moniteur d'activité) | non testé | non testé |
+| 6 | Permissions demandées par le système | Noter toute invite au premier lancement (macOS : accessibilité, surveillance de l'entrée, enregistrement d'écran ; Windows : pare-feu, SmartScreen). Attendu : aucune, car aucun clic n'est écouté à ce stade | non testé | non testé |
+| 7 | Mise à l'échelle | Écran à 100 % puis à 150 % ou Retina : l'anneau reste centré sur le curseur (écran principal seulement) | non testé | non testé |
+| 8 | Aucun droit administrateur (Windows) | Compte standard : lancement sans élévation | non testé | sans objet |
+| 9 | Processeur au repos | Curseur immobile : usage proche de zéro | non testé | non testé |
+
+### Fonctions de la couche plateforme
+
+| Fonction | Windows | macOS |
+|---|---|---|
+| Création de la surcouche (transparente, sans cadre, au-dessus) | non testé | non testé |
+| Traversée des clics (`set_cursor_hittest(false)`) | non testé | non testé |
+| Position du curseur (`GetCursorPos` / CoreGraphics) et conversion en pixels logiques | non testé | non testé |
+| Icône de zone de notification ou de barre de menus | non testé | non testé |
+| Absence d'icône dans le Dock | sans objet | non testé |
+| Visible au-dessus d'une app en plein écran (R2) | hors périmètre du socle | hors périmètre du socle |
+| Plusieurs écrans | hors périmètre du socle | hors périmètre du socle |
+
+### Vérifications automatiques
+
+- [ ] La CI est verte sur Windows et sur macOS (format, lint, tests, compilation, frontière système).
+- [ ] `./scripts/verifier-frontiere.sh` échoue si une API système apparaît hors de `src/plateforme` (vérifié à la main avec un fichier fautif).
+- [ ] `CLAUDE.md` renseigne « Commandes de vérification » et « Points de contrôle au démarrage ».
