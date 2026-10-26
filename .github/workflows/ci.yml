@@ -31,3 +31,12 @@ jobs:
         run: cargo test --locked
       - name: Compilation
         run: cargo build --release --locked
+      - name: Conserver l'exécutable (7 jours)
+        uses: actions/upload-artifact@v4
+        with:
+          name: souriso-${{ runner.os }}
+          path: |
+            target/release/souriso
+            target/release/souriso.exe
+          if-no-files-found: error
+          retention-days: 7

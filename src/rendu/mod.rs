@@ -50,10 +50,10 @@ impl Rendu {
 
         let infos = adapter.get_info();
         let capacites = surface.get_capabilities(&adapter);
-        eprintln!(
+        crate::sonde::ecrire(&format!(
             "Sonde : adaptateur « {} », backend {:?}, modes alpha {:?}, modes de présentation {:?}",
             infos.name, infos.backend, capacites.alpha_modes, capacites.present_modes
-        );
+        ));
 
         let (alpha_mode, non_premultiplie) = if capacites
             .alpha_modes

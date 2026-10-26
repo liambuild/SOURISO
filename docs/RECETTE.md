@@ -26,6 +26,14 @@ Socle minimal : surcouche plein écran transparente et traversable, repère qui 
 
 Variable utile à la sonde : `WGPU_BACKEND=vulkan` ou `dx12` (Windows), `metal` (macOS) force le backend. À noter dans le résultat.
 
+**Tester sans rien installer (exécutable issu de la CI).** Chaque exécution de la CI conserve l'exécutable compilé en mode release, 7 jours, sans release ni étiquette. Artefacts : `souriso-Windows` (contient `souriso.exe`) et `souriso-macOS` (contient `souriso`).
+
+1. GitHub, onglet *Actions*, ouvrir l'exécution voulue de « CI » (le bouton *Run workflow* en lance une sur la branche), descendre à la section *Artifacts*.
+2. Télécharger `souriso-Windows` (ou `souriso-macOS`), puis extraire l'archive zip dans un dossier où l'on peut écrire (le fichier texte y sera créé).
+3. Windows : double-clic sur `souriso.exe`. SmartScreen peut afficher « Windows a protégé votre ordinateur » (exécutable non signé) : *Informations complémentaires*, puis *Exécuter quand même*. À noter dans le scénario 6.
+4. macOS : l'extraction perd le droit d'exécution et le fichier est mis en quarantaine. Dans un terminal : `chmod +x souriso && xattr -d com.apple.quarantine souriso && ./souriso`. À noter dans le scénario 6.
+5. Lire `souriso-sonde.txt`, créé à côté de l'exécutable et remis à zéro à chaque lancement : la ligne `Sonde : adaptateur …, modes alpha […]`, puis, si l'application s'est arrêtée avec le code 2, la ligne `SOURISO : …` qui en donne le motif. Le même texte va sur la sortie d'erreur si un terminal est présent.
+
 ### Scénarios à tester par toi
 
 | # | Scénario | Attendu | Windows | macOS |
