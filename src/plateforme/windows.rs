@@ -1,6 +1,9 @@
 //! Adaptateur Windows. Aucun droit administrateur requis.
 
-use windows_sys::Win32::Foundation::POINT;
+use std::time::Duration;
+
+use windows_sys::Win32::Foundation::{FILETIME, POINT};
+use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
 use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
 use winit::event_loop::{ActiveEventLoop, EventLoop, OwnedDisplayHandle};
 use winit::platform::windows::WindowAttributesExtWindows;
@@ -58,4 +61,31 @@ pub fn position_curseur(ecran: &Ecran) -> Option<Point> {
         x: (p.x - ecran.origine.0) as f32 / e,
         y: (p.y - ecran.origine.1) as f32 / e,
     })
+}
+
+/// Temps noyau et utilisateur du processus. `FILETIME` compte des intervalles de 100 ns.
+pub fn temps_processeur() -> Option<Duration> {
+    let nul = FILETIME {
+        dwLowDateTime: 0,
+        dwHighDateTime: 0,
+    };
+    let (mut creation, mut fin, mut noyau, mut utilisateur) = (nul, nul, nul, nul);
+    // SAFETY : le pseudo-descripteur du processus courant est toujours valide et les quatre
+    // structures sont valides et exclusives pour la durée de l'appel.
+    let ok = unsafe {
+        GetProcessTimes(
+            GetCurrentProcess(),
+            &mut creation,
+            &mut fin,
+            &mut noyau,
+            &mut utilisateur,
+        )
+    };
+    if ok == 0 {
+        return None;
+    }
+    let cent_ns = |t: FILETIME| ((t.dwHighDateTime as u64) << 32) | t.dwLowDateTime as u64;
+    Some(Duration::from_nanos(
+        (cent_ns(noyau) + cent_ns(utilisateur)) * 100,
+    ))
 }

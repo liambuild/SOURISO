@@ -5,8 +5,10 @@ mod rendu;
 mod sonde;
 
 use std::process::ExitCode;
+use std::time::Instant;
 
 fn main() -> ExitCode {
+    let debut = Instant::now();
     sonde::initialiser();
     let boucle = match plateforme::creer_boucle() {
         Ok(b) => b,
@@ -16,7 +18,13 @@ fn main() -> ExitCode {
         }
     };
     let mut app = app::App::default();
-    if let Err(e) = boucle.run_app(&mut app) {
+    let resultat = boucle.run_app(&mut app);
+    sonde::ecrire(&sonde::bilan(
+        debut.elapsed(),
+        plateforme::temps_processeur(),
+        app.images,
+    ));
+    if let Err(e) = resultat {
         sonde::ecrire(&format!("SOURISO : {e}"));
         return ExitCode::from(2);
     }

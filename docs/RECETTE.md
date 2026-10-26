@@ -87,3 +87,56 @@ Surcouche Windows : DX12 avec présentation par composition (DirectComposition),
 | W11 | Autre carte graphique | Si une machine à carte intégrée est disponible : mêmes scénarios W1 à W3 | non testé |
 
 Automatique : `cargo clippy --target x86_64-pc-windows-msvc` et `--target aarch64-apple-darwin` passent depuis Linux (vérification croisée, qui ne remplace pas W1 à W11).
+
+## feat/projecteur
+
+Effet projecteur : un voile par écran, zone éclairée aux bords adoucis autour du curseur, raccourci global **Ctrl + Alt + Maj + P** pour activer ou couper. Configuration unique (`src/coeur/config.rs`, valeurs par défaut : rayon 150 px logiques, adoucissement 100 px, intensité 0,6, couleur noire), sans interface de réglage. Interface commune des effets. Aide de mesure du processeur écrite à la fermeture. Le repère en anneau du socle est remplacé par le projecteur.
+
+**État au moment de la livraison** : la CI et la vérification croisée depuis Linux valident la compilation, les tests du cœur et la validité du shader. Rien de ce qui suit n'a été exécuté sur Windows ni sur macOS par l'assistant : tout est « non testé », y compris tout chiffre de processeur.
+
+**Lire le bilan de fermeture.** À la fermeture par l'icône (« Quitter »), `souriso-sonde.txt` reçoit une ligne `Bilan : durée d'exécution … s, temps processeur … s, images dessinées … (… images/s en moyenne)`. Elle n'est pas écrite si le processus est tué.
+Part d'un cœur logique (%) = temps processeur ÷ durée d'exécution × 100 : 3 s de processeur sur 60 s donnent 5 %. La durée inclut le lancement : pour S3, bouger la souris en continu 60 s juste après le lancement puis quitter ; pour S4, laisser le curseur immobile 60 s puis quitter.
+Cadence : le chiffre d'images par seconde est une moyenne sur toute l'exécution, repos compris (aucune image n'est dessinée à l'arrêt) ; une moyenne basse n'est donc pas un défaut en soi.
+
+| # | Scénario | Attendu | Windows | macOS |
+|---|---|---|---|---|
+| W12 | Projecteur sur un écran | Écran assombri, zone éclairée centrée sur le curseur, bords adoucis (sans anneau net), le curseur reste visible | non testé | non testé |
+| W13 | Deux écrans ou plus | Un voile sur chaque écran. Le trou lumineux suit le curseur sur l'écran où il se trouve ; l'autre écran est entièrement voilé. Aucun écran ne perd son voile quand le curseur passe de l'un à l'autre, dans les deux sens | non testé | non testé |
+| W14 | Changement d'écran | Franchir la jonction lentement puis vite, aller-retour : pas de trou fantôme sur l'ancien écran, pas de clignotement, pas de retard visible du trou | non testé | non testé |
+| W15 | Plein écran d'une autre app | Diaporama, navigateur et jeu sans bordure en plein écran sur un écran : voile et trou visibles. Noter si une vidéo plein écran dessous saccade ou change d'aspect (le voile peut empêcher la présentation directe) | non testé | non testé |
+| W16 | Raccourci global | Ctrl + Alt + Maj + P depuis une autre application au premier plan : le voile disparaît, puis revient. Une pression longue ne fait pas clignoter. Fonctionne sans élévation | non testé | non testé |
+| W17 | Conflit du raccourci | Si le raccourci est déjà pris par un autre logiciel ou par le système : l'application démarre quand même, le projecteur reste actif en permanence et la sonde contient « raccourci global indisponible ». Noter toute combinaison réservée constatée | non testé | non testé |
+| W18 | Haute densité et échelles mixtes | Écrans à 100 % et 150 % (ou Retina et externe) : rayon visuellement identique, trou centré à ± 1 px logique sur chaque écran | non testé | non testé |
+| W19 | Traversée des clics | Cliquer, glisser, faire défiler et cliquer droit à travers le voile agit sur la fenêtre dessous, sur chaque écran | non testé | non testé |
+| W20 | Processeur (S3, S4) avec voile | Mêmes mesures que W7 avec la ligne « Bilan », sur un puis deux écrans. Seuils : < 3 % en mouvement, < 1 % au repos. Noter aussi la charge GPU du Gestionnaire des tâches | non testé | non testé |
+| W21 | Bilan de fermeture | Après « Quitter », la ligne « Bilan » est dans `souriso-sonde.txt` avec une durée, un temps processeur et un nombre d'images cohérents. L'application se comporte comme avant | non testé | non testé |
+| W22 | Projecteur coupé | Voile coupé : écran entièrement transparent, aucune image dessinée tant que rien ne change (le compteur d'images du bilan n'augmente pas) | non testé | non testé |
+
+### Fonctions de la couche plateforme (ajouts)
+
+| Fonction | Windows | macOS |
+|---|---|---|
+| Liste des écrans (position, taille, échelle) | non testé | non testé |
+| Raccourci global (`RegisterHotKey` / Carbon par `global-hotkey`) | non testé | non testé |
+| Temps processeur du processus (`GetProcessTimes` / `getrusage`) | non testé | non testé |
+| Branchement ou retrait d'un écran en cours d'exécution | non géré (relancer l'application) | non géré |
+
+### Vérifications automatiques
+
+- [x] Format, lint, tests (11) et frontière système réussissent sous Linux ; `cargo clippy --all-targets --locked -- -D warnings` réussit aussi avec `--target x86_64-pc-windows-msvc` et `--target aarch64-apple-darwin` (vérification croisée, qui ne remplace pas W12 à W22).
+- [ ] La CI est verte sur Windows et sur macOS.
+
+### Cases à cocher (feat/projecteur)
+
+- [ ] W12 : projecteur sur un écran, bords adoucis (Windows, macOS)
+- [ ] W13 : un voile par écran, trou sur l'écran du curseur (Windows, macOS)
+- [ ] W14 : changement d'écran sans trou fantôme ni clignotement (Windows, macOS)
+- [ ] W15 : visible au-dessus d'une app en plein écran, vidéo dessous inchangée (Windows, macOS)
+- [ ] W16 : raccourci Ctrl + Alt + Maj + P active et coupe depuis une autre app (Windows, macOS)
+- [ ] W17 : raccourci refusé par le système : l'application démarre, la sonde le signale (Windows, macOS)
+- [ ] W18 : échelles mixtes, trou centré à ± 1 px logique (Windows, macOS)
+- [ ] W19 : clics traversants sur chaque écran (Windows, macOS)
+- [ ] W20 : processeur S3 < 3 % et S4 < 1 %, un puis deux écrans, calculés avec la ligne « Bilan » (Windows, macOS)
+- [ ] W21 : ligne « Bilan » cohérente après « Quitter » (Windows, macOS)
+- [ ] W22 : voile coupé, aucune image dessinée au repos (Windows, macOS)
+

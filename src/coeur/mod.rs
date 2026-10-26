@@ -1,5 +1,10 @@
 //! Cœur : modèle indépendant du système. Testable sous Linux.
 
+pub mod activation;
+pub mod config;
+
+pub use config::{Config, Raccourci};
+
 /// Position en pixels logiques, origine en haut à gauche de l'écran.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Point {
@@ -18,42 +23,31 @@ pub struct Ecran {
 }
 
 impl Ecran {
-    /// Convertit une position logique de l'écran en pixels physiques de sa surface.
-    pub fn vers_physique(&self, p: Point) -> (f32, f32) {
+    /// Vrai si la position, en pixels logiques de cet écran, tombe sur lui.
+    pub fn contient(&self, p: Point) -> bool {
         let e = self.echelle as f32;
-        (p.x * e, p.y * e)
+        p.x >= 0.0 && p.y >= 0.0 && p.x < self.taille.0 as f32 / e && p.y < self.taille.1 as f32 / e
     }
 }
-
-/// Paramètres du repère qui suit le curseur, en pixels logiques.
-#[derive(Clone, Copy, Debug)]
-pub struct Repere {
-    pub rayon: f32,
-    pub epaisseur: f32,
-    /// Couleur RGB, composantes de 0 à 1.
-    pub couleur: [f32; 3],
-}
-
-pub const REPERE: Repere = Repere {
-    rayon: 28.0,
-    epaisseur: 4.0,
-    couleur: [1.0, 0.78, 0.1],
-};
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn conversion_logique_vers_physique() {
+    fn un_ecran_ne_contient_que_ses_propres_pixels() {
         let ecran = Ecran {
-            origine: (0, 0),
-            taille: (3840, 2160),
+            origine: (1920, 0),
+            taille: (3000, 1500),
             echelle: 1.5,
         };
-        assert_eq!(
-            ecran.vers_physique(Point { x: 100.0, y: 40.0 }),
-            (150.0, 60.0)
-        );
+        assert!(ecran.contient(Point { x: 0.0, y: 0.0 }));
+        assert!(ecran.contient(Point {
+            x: 1999.0,
+            y: 999.0
+        }));
+        assert!(!ecran.contient(Point { x: 2000.0, y: 10.0 }));
+        assert!(!ecran.contient(Point { x: -1.0, y: 10.0 }));
+        assert!(!ecran.contient(Point { x: 10.0, y: 1000.0 }));
     }
 }

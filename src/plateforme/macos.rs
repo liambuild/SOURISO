@@ -52,3 +52,5 @@ pub fn position_curseur(ecran: &Ecran) -> Option<Point> {
         y: (p.y - ecran.origine.1 as f64 / e) as f32,
     })
 }
+
+pub use super::rusage::temps_processeur;
