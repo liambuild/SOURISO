@@ -38,6 +38,8 @@ pub fn position_curseur(ecran: &Ecran) -> Option<Point> {
     })
 }
 
+pub use super::rusage::temps_processeur;
+
 #[cfg(test)]
 mod tests {
     use super::*;

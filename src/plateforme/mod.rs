@@ -1,13 +1,13 @@
 //! Couche plateforme : seul endroit qui connaît le système.
-//! Le contrat est : boucle d'événements, surcouche passe-clics, position du curseur,
-//! icône de barre de menus ou de zone de notification.
+//! Le contrat est : boucle d'événements, écrans, surcouche passe-clics, position du curseur,
+//! icône de barre de menus ou de zone de notification, raccourci global, temps processeur.
 
 use std::sync::Arc;
 
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::Window;
 
-use crate::coeur::{Ecran, Point};
+use crate::coeur::{Ecran, Point, Raccourci};
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 mod factice;
@@ -36,24 +36,50 @@ use icone_factice as icone;
 
 pub use icone::Icone;
 
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+mod raccourci_systeme;
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+use raccourci_systeme as raccourci;
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+mod raccourci_factice;
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+use raccourci_factice as raccourci;
+
+pub use raccourci::RaccourciGlobal;
+
+#[cfg(not(target_os = "windows"))]
+mod rusage;
+
 /// Crée la boucle d'événements avec les réglages propres au système.
 pub fn creer_boucle() -> Result<EventLoop<()>, String> {
     systeme::creer_boucle()
 }
 
-/// Décrit l'écran principal dans le repère normalisé de l'application.
-pub fn ecran_principal(event_loop: &ActiveEventLoop) -> Result<Ecran, String> {
-    let moniteur = event_loop
-        .primary_monitor()
-        .or_else(|| event_loop.available_monitors().next())
-        .ok_or("aucun écran détecté")?;
-    let position = moniteur.position();
-    let taille = moniteur.size();
-    Ok(Ecran {
-        origine: (position.x, position.y),
-        taille: (taille.width, taille.height),
-        echelle: moniteur.scale_factor(),
-    })
+/// Décrit tous les écrans dans le repère normalisé de l'application, le principal en premier.
+pub fn ecrans(event_loop: &ActiveEventLoop) -> Result<Vec<Ecran>, String> {
+    let principal = event_loop.primary_monitor();
+    let mut moniteurs: Vec<_> = event_loop.available_monitors().collect();
+    if let Some(principal) = principal {
+        if let Some(i) = moniteurs.iter().position(|m| *m == principal) {
+            moniteurs.swap(0, i);
+        }
+    }
+    if moniteurs.is_empty() {
+        return Err("aucun écran détecté".into());
+    }
+    Ok(moniteurs
+        .iter()
+        .map(|moniteur| {
+            let position = moniteur.position();
+            let taille = moniteur.size();
+            Ecran {
+                origine: (position.x, position.y),
+                taille: (taille.width, taille.height),
+                echelle: moniteur.scale_factor(),
+            }
+        })
+        .collect())
 }
 
 /// Crée la surcouche : transparente, sans cadre, au-dessus de tout, qui laisse passer les clics.
@@ -87,4 +113,14 @@ pub fn position_curseur(ecran: &Ecran) -> Option<Point> {
 /// Crée l'icône de barre de menus ou de zone de notification, avec une entrée « Quitter ».
 pub fn creer_icone() -> Result<Icone, String> {
     Icone::creer()
+}
+
+/// Temps processeur consommé par le processus (noyau et utilisateur), depuis son lancement.
+pub fn temps_processeur() -> Option<std::time::Duration> {
+    systeme::temps_processeur()
+}
+
+/// Enregistre le raccourci global. Échoue si le système le refuse (combinaison déjà prise).
+pub fn creer_raccourci(raccourci: &Raccourci) -> Result<RaccourciGlobal, String> {
+    RaccourciGlobal::creer(raccourci)
 }

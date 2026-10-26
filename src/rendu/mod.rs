@@ -1,42 +1,37 @@
-//! Rendu GPU du repère. Ne connaît pas le système : reçoit une fenêtre déjà créée.
+//! Rendu GPU des effets. Ne connaît pas le système : reçoit des fenêtres déjà créées.
+//! Un seul périphérique graphique sert toutes les surcouches ; chaque écran a sa surface et ses
+//! effets.
+
+mod effet;
+mod projecteur;
 
 use std::sync::Arc;
 
-use bytemuck::{Pod, Zeroable};
 use winit::event_loop::OwnedDisplayHandle;
 use winit::window::Window;
 
-use crate::coeur::{Ecran, Point, REPERE};
+use crate::coeur::activation::Activations;
+use crate::coeur::{Config, Ecran, Point};
+use effet::{creer_effets, Contexte, Effet, Sortie};
 
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
-struct Uniforme {
-    curseur: [f32; 2],
-    rayon: f32,
-    epaisseur: f32,
-    couleur: [f32; 3],
-    non_premultiplie: f32,
-}
-
-pub struct Rendu {
-    surface: wgpu::Surface<'static>,
-    config: wgpu::SurfaceConfiguration,
+/// Instance, adaptateur et périphérique partagés par tous les écrans.
+pub struct Gpu {
+    instance: wgpu::Instance,
+    adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    pipeline: wgpu::RenderPipeline,
-    uniforme: wgpu::Buffer,
-    groupe: wgpu::BindGroup,
-    non_premultiplie: bool,
 }
 
-impl Rendu {
-    /// Prépare le rendu. Échoue, avec le constat des capacités de la surface, si aucun mode
-    /// de transparence n'est disponible : afficher une surface opaque cacherait l'écran.
-    pub fn nouveau(fenetre: Arc<Window>, affichage: OwnedDisplayHandle) -> Result<Self, String> {
+impl Gpu {
+    /// Choisit l'adaptateur compatible avec la surface de la première fenêtre et la renvoie.
+    pub fn nouveau(
+        affichage: OwnedDisplayHandle,
+        premiere: &Arc<Window>,
+    ) -> Result<(Self, wgpu::Surface<'static>), String> {
         let instance =
             wgpu::Instance::new(crate::plateforme::options_instance(affichage).with_env());
         let surface = instance
-            .create_surface(fenetre.clone())
+            .create_surface(premiere.clone())
             .map_err(|e| format!("création de la surface : {e}"))?;
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             compatible_surface: Some(&surface),
@@ -46,12 +41,58 @@ impl Rendu {
         let (device, queue) =
             pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
                 .map_err(|e| format!("périphérique graphique : {e}"))?;
-
         let infos = adapter.get_info();
-        let capacites = surface.get_capabilities(&adapter);
         crate::sonde::ecrire(&format!(
-            "Sonde : adaptateur « {} », backend {:?}, modes alpha {:?}, modes de présentation {:?}",
-            infos.name, infos.backend, capacites.alpha_modes, capacites.present_modes
+            "Sonde : adaptateur « {} », backend {:?}",
+            infos.name, infos.backend
+        ));
+        Ok((
+            Gpu {
+                instance,
+                adapter,
+                device,
+                queue,
+            },
+            surface,
+        ))
+    }
+
+    /// Surface d'une fenêtre supplémentaire. Échoue si l'adaptateur ne sait pas l'afficher.
+    pub fn surface(&self, fenetre: &Arc<Window>) -> Result<wgpu::Surface<'static>, String> {
+        let surface = self
+            .instance
+            .create_surface(fenetre.clone())
+            .map_err(|e| format!("création de la surface : {e}"))?;
+        if !self.adapter.is_surface_supported(&surface) {
+            return Err("l'adaptateur graphique ne sait pas afficher sur cet écran".into());
+        }
+        Ok(surface)
+    }
+}
+
+/// Rendu d'une surcouche : la surface d'un écran et les effets qui s'y dessinent.
+pub struct Rendu {
+    surface: wgpu::Surface<'static>,
+    config: wgpu::SurfaceConfiguration,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    effets: Vec<Box<dyn Effet>>,
+}
+
+impl Rendu {
+    /// Prépare le rendu. Échoue, avec le constat des capacités de la surface, si aucun mode
+    /// de transparence n'est disponible : afficher une surface opaque cacherait l'écran.
+    pub fn nouveau(
+        gpu: &Gpu,
+        surface: wgpu::Surface<'static>,
+        fenetre: &Window,
+        indice: usize,
+        reglages: &Config,
+    ) -> Result<Self, String> {
+        let capacites = surface.get_capabilities(&gpu.adapter);
+        crate::sonde::ecrire(&format!(
+            "Sonde : écran {indice}, modes alpha {:?}, modes de présentation {:?}",
+            capacites.alpha_modes, capacites.present_modes
         ));
 
         let (alpha_mode, non_premultiplie) = if capacites
@@ -89,76 +130,18 @@ impl Rendu {
             color_space: Default::default(),
             view_formats: vec![],
         };
-        surface.configure(&device, &config);
+        surface.configure(&gpu.device, &config);
 
-        let shader = device.create_shader_module(wgpu::include_wgsl!("repere.wgsl"));
-        let uniforme = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("repere"),
-            size: std::mem::size_of::<Uniforme>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let disposition = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: None,
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-        });
-        let groupe = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &disposition,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniforme.as_entire_binding(),
-            }],
-        });
-        let gabarit = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: None,
-            bind_group_layouts: &[Some(&disposition)],
-            immediate_size: 0,
-        });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("repere"),
-            layout: Some(&gabarit),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            multiview_mask: None,
-            cache: None,
-        });
-
+        let sortie = Sortie {
+            format,
+            non_premultiplie,
+        };
         Ok(Rendu {
             surface,
             config,
-            device,
-            queue,
-            pipeline,
-            uniforme,
-            groupe,
-            non_premultiplie,
+            device: gpu.device.clone(),
+            queue: gpu.queue.clone(),
+            effets: creer_effets(&gpu.device, &sortie, reglages),
         })
     }
 
@@ -171,26 +154,31 @@ impl Rendu {
         self.surface.configure(&self.device, &self.config);
     }
 
-    /// Dessine le repère autour du curseur. Sans curseur connu, l'image reste transparente.
-    pub fn dessiner(&mut self, ecran: &Ecran, curseur: Option<Point>) {
-        let e = ecran.echelle as f32;
-        let (cx, cy) = curseur.map_or((-1000.0, -1000.0), |p| ecran.vers_physique(p));
-        let donnees = Uniforme {
-            curseur: [cx, cy],
-            rayon: REPERE.rayon * e,
-            epaisseur: REPERE.epaisseur * e,
-            couleur: REPERE.couleur,
-            non_premultiplie: if self.non_premultiplie { 1.0 } else { 0.0 },
+    /// Dessine les effets actifs. Sans effet actif, l'image reste transparente.
+    /// `curseur` est la position sur cet écran, ou `None` s'il est ailleurs.
+    /// Renvoie vrai si l'image a été présentée.
+    pub fn dessiner(
+        &mut self,
+        ecran: &Ecran,
+        curseur: Option<Point>,
+        activations: &Activations,
+    ) -> bool {
+        let contexte = Contexte {
+            curseur,
+            echelle: ecran.echelle as f32,
         };
-        self.queue
-            .write_buffer(&self.uniforme, 0, bytemuck::bytes_of(&donnees));
+        for effet in &mut self.effets {
+            if activations.est_actif(effet.nom()) {
+                effet.preparer(&self.queue, &contexte);
+            }
+        }
 
         let texture = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(t)
             | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
             _ => {
                 self.surface.configure(&self.device, &self.config);
-                return;
+                return false;
             }
         };
         let vue = texture.texture.create_view(&Default::default());
@@ -212,11 +200,14 @@ impl Rendu {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            passe.set_pipeline(&self.pipeline);
-            passe.set_bind_group(0, &self.groupe, &[]);
-            passe.draw(0..3, 0..1);
+            for effet in &self.effets {
+                if activations.est_actif(effet.nom()) {
+                    effet.dessiner(&mut passe);
+                }
+            }
         }
         self.queue.submit(Some(encodeur.finish()));
         self.queue.present(texture);
+        true
     }
 }
