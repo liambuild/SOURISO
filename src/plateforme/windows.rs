@@ -2,7 +2,7 @@
 
 use windows_sys::Win32::Foundation::POINT;
 use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
-use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::event_loop::{ActiveEventLoop, EventLoop, OwnedDisplayHandle};
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{Window, WindowAttributes, WindowLevel};
 
@@ -32,6 +32,16 @@ pub fn creer_surcouche(event_loop: &ActiveEventLoop, ecran: &Ecran) -> Result<Wi
     event_loop
         .create_window(attributs)
         .map_err(|e| e.to_string())
+}
+
+/// DX12 avec présentation par composition (DirectComposition) : c'est le seul chemin qui offre
+/// une surface transparente sous Windows. Le mode par défaut de wgpu (`DxgiFromHwnd`) et Vulkan
+/// n'annoncent que l'alpha opaque.
+pub fn options_instance(affichage: OwnedDisplayHandle) -> wgpu::InstanceDescriptor {
+    let mut options = wgpu::InstanceDescriptor::new_with_display_handle(Box::new(affichage));
+    options.backends = wgpu::Backends::DX12;
+    options.backend_options.dx12.presentation_system = wgpu::Dx12SwapchainKind::DxgiFromVisual;
+    options
 }
 
 /// `GetCursorPos` renvoie des pixels physiques du bureau virtuel (processus sensible au DPI,

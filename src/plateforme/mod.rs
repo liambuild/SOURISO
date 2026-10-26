@@ -66,6 +66,19 @@ pub fn creer_surcouche(event_loop: &ActiveEventLoop, ecran: &Ecran) -> Result<Ar
     Ok(Arc::new(fenetre))
 }
 
+/// Options de l'instance graphique propres au système (backend, mode de présentation).
+/// Le rendu y ajoute seulement les variables d'environnement `WGPU_*`, utiles à la sonde.
+#[cfg(target_os = "windows")]
+pub use windows::options_instance;
+
+/// Hors Windows, les options par défaut de wgpu conviennent (Metal sous macOS).
+#[cfg(not(target_os = "windows"))]
+pub fn options_instance(
+    affichage: winit::event_loop::OwnedDisplayHandle,
+) -> wgpu::InstanceDescriptor {
+    wgpu::InstanceDescriptor::new_with_display_handle(Box::new(affichage))
+}
+
 /// Position du curseur sur l'écran donné, en pixels logiques (conversion faite ici).
 pub fn position_curseur(ecran: &Ecran) -> Option<Point> {
     systeme::position_curseur(ecran)
