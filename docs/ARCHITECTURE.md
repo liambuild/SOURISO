@@ -260,6 +260,16 @@ Tous sont mesurables. Les machines de référence (un Mac à puce Apple et un PC
 - **Ce qui reste à confirmer sous Windows** (voir `docs/RECETTE.md`) : cadence et décalage (S1, S2), processeur (S3, S4), absence de fond noir ou de cadre, passe-clics, échelles, plusieurs écrans. Le coût processeur de la composition (≈ 0,6 à 1,8 % d'un cœur à 60 images/s) est une estimation.
 - **macOS** : inchangé, toujours « non testé ».
 
+**Projecteur, plusieurs écrans et interface des effets (branche `feat/projecteur`).**
+
+- **Une surcouche par écran**, un seul périphérique graphique partagé (mémoire : pas un périphérique par écran). Le curseur n'est cherché que dans l'écran qui le contient ; les autres écrans portent un voile plein.
+- **Redessin seulement sur changement** : une image par écran dont la position du curseur sur lui, l'état d'activation ou la taille a changé. Écran sans curseur et curseur immobile : aucune image. Lorsque le curseur passe d'un écran à l'autre, chacun des deux est redessiné une fois. Le voile ne multiplie donc pas le coût processeur par le nombre d'écrans.
+- **Risque pour S3 et S4 : non écarté, non mesuré.** Côté processeur, la conception ne devrait pas dépasser le socle (même cadence d'interrogation, mêmes images). Reste le coût de la composition (DWM) d'une surface plein écran qui n'est plus presque transparente : charge GPU et mémoire par écran, et effet possible sur une vidéo plein écran dessous. Rien de cela n'est mesuré ; voir W7, W8 et W15 dans `docs/RECETTE.md`. Si W7 dépasse 3 % ou 1 %, le repli est à décider avec le propriétaire avant de toucher à la cadence ou à la présentation.
+- **Interface des effets** : `rendu::effet::Effet` (nom, préparation des données GPU, dessin dans la passe) et `creer_effets`, seul endroit où déclarer un effet. L'activation par nom vit dans `coeur::activation`. Ajouter un effet ne touche ni la boucle, ni la plateforme.
+- **Configuration unique** : `coeur::config::Config`, valeurs par défaut sans interface de réglage.
+- **Frontière** : le raccourci global (`RegisterHotKey` / Carbon via la crate `global-hotkey`, sans permission ni droit administrateur) et la lecture du temps processeur du processus (`GetProcessTimes` / `getrusage`) vivent dans `src/plateforme`. Défaut : Ctrl + Alt + Maj + P. Un refus du système n'arrête pas l'application, il est écrit dans la sonde.
+- **Limite connue** : les écrans sont détectés au lancement ; brancher ou débrancher un écran, ou changer sa résolution, demande de relancer l'application.
+
 **Seuils** : les reformulations de la section 6 (latence en images, unité de mesure du processeur, mesure de la mémoire, définition du démarrage) sont proposées mais **pas encore validées**. Elles sont à valider avant la v1.
 
 **Questions encore ouvertes** (section 8) : versions minimales de Windows et de macOS ; cadence cible (60 images/s ou taux de l'écran) ; mises à jour manuelles depuis les releases ; date de disponibilité du Mac.
