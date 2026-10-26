@@ -24,4 +24,5 @@ SOURISO rend le curseur facile à suivre à l'écran, en direct comme en enregis
 Ce dépôt est la source de vérité du projet : code, documentation, décisions, recette et installeurs.
 
 - `CLAUDE.md` : méthode de travail et règles du projet.
+- `docs/ARCHITECTURE.md` : choix de la base technique, risques et critères de succès.
 - `docs/RECETTE.md` : recette du produit.
