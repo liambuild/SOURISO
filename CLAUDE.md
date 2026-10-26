@@ -25,6 +25,12 @@
 - Si une consigne contredit le code, tu t'arrêtes et tu me le signales.
 - Avant de modifier tout ce qui touche aux permissions système, à la signature ou à la publication, tu me rapportes ton constat.
 
+## Architecture
+
+- La base technique et la frontière système sont décidées dans `docs/ARCHITECTURE.md`.
+- Tout ce qui dépend d'un système vit dans la couche plateforme, nulle part ailleurs.
+- Aucun droit administrateur ne doit être requis sous Windows.
+
 ## Fonctions dépendant du système
 
 Toute fonction qui dépend du système est soit testée sur le système concerné, soit marquée « non testé » dans `docs/RECETTE.md`.
