@@ -347,3 +347,63 @@ Quatre effets s'ajoutent au projecteur : anneau, traînée, ondulation au clic (
 - [ ] W50 : images par écran au repos dans le bilan (Windows, macOS)
 - [ ] W51 : clics et sons dans le bilan (Windows, macOS)
 - [ ] W52 : macOS, aucune invite de permission (macOS)
+
+## feat/profils
+
+Profils nommés (par défaut, « Présentation », « Enregistrement »), fichier `profils.json`, raccourcis de profils, réglage de l'adaptateur. Tout reste « non testé » : rien n'a pu être essayé sous Windows ni macOS. Dossier des profils : `%APPDATA%\SOURISO` (Windows), `~/Library/Application Support/SOURISO` (macOS). Raccourcis par défaut (Ctrl + Alt + Maj + …) : D Par défaut, E Présentation, R Enregistrement, N profil suivant.
+
+### Fonctions de la couche plateforme (nouvelles ou modifiées)
+
+| Fonction | Windows | macOS |
+|---|---|---|
+| `dossier_donnees` (dossier des profils, sans droit particulier) | non testé (`%APPDATA%`) | non testé (`~/Library/Application Support`) |
+| `creer_raccourcis` (jusqu'à 9 raccourcis : cinq effets, profil suivant, trois profils) | non testé | non testé |
+
+### Scénarios
+
+| # | Scénario | Attendu | Windows | macOS |
+|---|---|---|---|---|
+| W53 | Premier lancement : supprimer le dossier des profils, lancer sans droit administrateur | Le dossier et `profils.json` sont créés. La sonde dit « premier lancement : profils d'exemple créés » et « profil actif « Par défaut » (1 sur 3) ». Le fichier contient `"version": 1` et trois profils | non testé | non testé |
+| W54 | Persistance après redémarrage : passer à « Présentation » (Ctrl + Alt + Maj + E), quitter par l'icône, relancer | La sonde dit « profil actif « Présentation » (2 sur 3) » ; l'anneau est celui de Présentation (grand, rouge) dès la première image. Refaire avec « Enregistrement », puis en tuant le processus (pas de fermeture propre) : le dernier profil choisi est restauré | non testé | non testé |
+| W55 | Raccourci d'un profil : D, E, R | Chaque raccourci passe à son profil, la sonde écrit « profil « A » → « B » (raccourci du profil) ». Couper l'anneau (Ctrl + Alt + Maj + A) puis E : l'anneau revient. Appuyer sur E alors que « Présentation » est actif : « conservé », effets coupés réactivés, pas de changement compté | non testé | non testé |
+| W56 | Profil suivant : N, quatre fois | Par défaut → Présentation → Enregistrement → Par défaut → Présentation. Un effet coupé le reste (N ne réactive rien). Touche maintenue 2 s : un seul changement | non testé | non testé |
+| W57 | Changement de profil en pleine utilisation : curseur en mouvement continu, clics fréquents, traînée et ondulations en cours, 20 changements en 10 s (E, R, D en alternance, en respectant 0,4 s entre deux) | Aucun blocage, aucun clignotement, pas de fond noir ni de cadre ; les ondulations et la traînée en cours continuent avec les nouvelles valeurs ; le son suit le profil (cloche, bulle, clic). Dans le bilan, « changements de profil » = nombre de changements effectifs, et les images par écran n'augmentent pas plus vite qu'en mouvement continu sans changement (aucune présentation en plus) | non testé | non testé |
+| W58 | Raccourci déjà pris : occuper Ctrl + Alt + Maj + E avec une autre application (ou lancer une seconde instance de SOURISO) avant le lancement | L'application démarre ; la sonde dit « raccourci global « Profil « Présentation » » indisponible : raccourci refusé par le système (déjà pris ?) » ; les autres raccourcis (D, R, N, P, A, T, O, S) fonctionnent ; Présentation reste atteignable par N. Libérer la combinaison et relancer : le raccourci fonctionne. **macOS : noter si le refus est détecté** (Carbon peut ne rien signaler quand une autre application détient la combinaison) | non testé | non testé |
+| W59 | Fichier corrompu : (a) fichier vide, (b) tronqué au milieu, (c) texte quelconque, (d) `"actif": "trois"` | Démarrage normal avec les trois profils d'exemple, sans plantage ni boîte d'erreur ; la sonde dit « fichier des profils inutilisable (…) : valeurs par défaut, fichier conservé sous …profils.json.corrompu » ; ce fichier contient l'ancien contenu ; un `profils.json` valide est recréé | non testé | non testé |
+| W60 | Fichier d'une autre version : mettre `"version": 2` | Traité comme W59 (mis de côté, pas écrasé sans copie), la sonde cite « version 2 du format non prise en charge » | non testé | non testé |
+| W61 | Fichier modifié à la main : `"actif": 9`, deux profils de même nom, un raccourci identique à celui du projecteur (P), `intensite` à 12, un champ supprimé | Démarrage normal ; les valeurs sont ramenées dans leurs bornes, les noms rendus uniques, le raccourci en conflit retiré, le profil actif ramené au premier, le champ absent pris par défaut ; une ligne de sonde par correction | non testé | non testé |
+| W62 | Dossier non inscriptible (Windows : retirer le droit d'écriture sur `profils.json` et le dossier ; macOS : `chmod -w`) puis changer de profil | L'application continue ; la sonde dit « enregistrement des profils impossible » ; le changement de profil agit quand même, mais le choix n'est pas restauré au lancement suivant | non testé | non testé |
+| W63 | Dossier de données introuvable (Windows : lancer avec la variable `APPDATA` vidée) | Profils d'exemple en mémoire, sonde « dossier de données introuvable… rien ne sera enregistré » ; aucun fichier écrit ailleurs | non testé | sans objet |
+| W64 | Adaptateur : mettre `"adaptateur": "econome"` puis `"performant"`, relancer à chaque fois ; ensuite `WGPU_POWER_PREF=high` avec « econome » | La ligne « Sonde : adaptateur » cite « réglage de l'adaptateur (économe ou performant) » et la carte retenue suit le réglage ; avec la variable d'environnement, le critère est « variable WGPU_POWER_PREF » (la variable l'emporte). Un changement du réglage n'agit qu'au lancement suivant | non testé | non testé |
+| W65 | S4 après changements de profil : changer plusieurs fois de profil, attendre 2 s, curseur immobile 60 s, tous les effets actifs | Part d'un cœur logique sous 1 % (méthode de W7, ligne « Bilan »), et aucune image dessinée pendant la minute (comme W50) | non testé | non testé |
+| W66 | Ligne « Bilan » : profil | Elle se termine par « profil actif « X », changements de profil N » ; N compte les changements effectifs (pas les « conservé ») | non testé | non testé |
+| W67 | Écriture sans droit administrateur et sans réseau | Lancement avec un compte standard : aucune invite d'élévation, `profils.json` écrit dans le dossier de l'utilisateur ; aucune connexion réseau ouverte par le processus | non testé | non testé |
+
+### Vérifications automatiques
+
+- [x] Format, lint (`-D warnings`), 70 tests, frontière système et compilation release réussissent sous Linux. Le lint réussit aussi avec `--target x86_64-pc-windows-msvc` et `--target aarch64-apple-darwin` (vérification croisée, qui ne remplace pas la recette).
+- [x] Tests du cœur : création, copie, renommage, suppression des profils (le premier est refusé), noms uniques et bornés, conflits de raccourcis, réparation d'un fichier incohérent, aller-retour du fichier, fichier absent, vide, tronqué, mal typé, d'une autre version, partiel, aux valeurs absurdes, chemin illisible.
+- [x] Un essai graphique vérifie que `Effet::appliquer` change le dessin (anneau de Présentation) sans recréer les effets.
+- [ ] La CI est verte sur Windows et sur macOS.
+
+### Cases à cocher (feat/profils)
+
+- [ ] W53 : premier lancement (Windows, macOS)
+- [ ] W54 : persistance après redémarrage (Windows, macOS)
+- [ ] W55 : raccourci d'un profil (Windows, macOS)
+- [ ] W56 : profil suivant (Windows, macOS)
+- [ ] W57 : changement de profil en pleine utilisation (Windows, macOS)
+- [ ] W58 : raccourci déjà pris, détection notée (Windows, macOS)
+- [ ] W59 : fichier corrompu (Windows, macOS)
+- [ ] W60 : fichier d'une autre version (Windows, macOS)
+- [ ] W61 : fichier modifié à la main (Windows, macOS)
+- [ ] W62 : dossier non inscriptible (Windows, macOS)
+- [ ] W63 : dossier de données introuvable (Windows)
+- [ ] W64 : réglage de l'adaptateur et priorité des variables (Windows, macOS)
+- [ ] W65 : S4 après changements de profil (Windows, macOS)
+- [ ] W66 : profil dans le bilan (Windows, macOS)
+- [ ] W67 : sans droit administrateur, sans réseau (Windows, macOS)
+
+### Prévu pour `feat/reglages` (pas dans cette branche)
+
+Fenêtre de réglages ouverte puis fermée (processus du moteur web disparus, mémoire revenue), S4 fenêtre fermée, WebView2 absent, fermeture de la fenêtre quand le processus principal s'arrête, plantage de la fenêtre sans effet sur le processus principal.
