@@ -101,6 +101,13 @@ pub struct Compteurs {
     pub reconfigurations: u64,
 }
 
+/// Taux de rafraîchissement d'un écran pour la sonde, ou « inconnu » si le système ne le donne pas.
+pub fn rafraichissement(millihertz: Option<u32>) -> String {
+    millihertz.map_or("inconnu".to_string(), |m| {
+        format!("{:.3} Hz", f64::from(m) / 1000.0)
+    })
+}
+
 /// Ligne de bilan, pour calculer à la main la part d'un cœur logique : temps processeur ÷ durée
 /// d'exécution. Les images sont celles réellement présentées.
 pub fn bilan(
@@ -165,6 +172,13 @@ mod tests {
              réveils de la boucle 7500, lectures du curseur 22500, \
              échecs d'acquisition 3, reconfigurations de surface 1"
         );
+    }
+
+    #[test]
+    fn le_rafraichissement_est_en_hertz_ou_inconnu() {
+        assert_eq!(rafraichissement(Some(59_940)), "59.940 Hz");
+        assert_eq!(rafraichissement(Some(144_000)), "144.000 Hz");
+        assert_eq!(rafraichissement(None), "inconnu");
     }
 
     #[test]
