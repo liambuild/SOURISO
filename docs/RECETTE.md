@@ -191,3 +191,53 @@ Aucun chiffre de ce tableau n'a été relevé : tout est « non testé » jusqu'
 - [ ] W26 : bilan en cours, une seule ligne, conservé si le processus est tué (Windows, macOS)
 - [ ] W27 : apparence inchangée (Windows, macOS)
 - [ ] W28 : clics traversants et plein écran inchangés (Windows, macOS)
+
+## fix/cout-presentation-projecteur
+
+Les taux de rafraîchissement des écrans ne sont pas connus, et la piste E (plafond à 60 images/s, reportée par `fix/performance-projecteur`) en dépend. La ligne de sonde de chaque écran donne maintenant ce taux, lu par le système (winit : `EnumDisplaySettings` sous Windows, mode d'affichage CoreGraphics sous macOS). Rien ne change dans l'application : seule la sonde en dit plus.
+
+**Évaluation de la piste E avec ce taux.** La présentation est en `Fifo` : le nombre d'images par seconde d'un écran est borné par son taux. Un plafond à 60 images/s ne coûte donc rien sur un écran à 60 Hz, et fait perdre de la fluidité (effet en retard, cf. question ouverte 3 de `docs/ARCHITECTURE.md`) sur un écran à 120 Hz ou plus. Après W29, rapprocher chaque taux des images par écran du bilan de W23 : si un écran dessine nettement plus de 60 images/s, E économiserait du processeur sur lui, au prix de la fluidité ; sinon E n'apporte rien. **Constat du propriétaire (Windows, hors sonde) :** les écrans tournent autour de 60 Hz. Le plafond de E n'apporte donc rien : E est écartée (W29 le confirmera par les taux de la sonde).
+
+**Piste G — choix de l'adaptateur graphique (reportée tant que le test n'est pas fait).**
+
+*Constat du propriétaire :* deux cartes, une NVIDIA Quadro P620 sans mode d'affichage actif rapporté et une Intel UHD Graphics à 59 Hz. L'application rend sur la Quadro alors que les écrans semblent branchés sur l'Intel. Hypothèse : à chaque image, le système recopie le rendu d'une carte à l'autre, ce qui expliquerait un temps noyau élevé. Elle n'est pas vérifiée : la part du noyau du bilan la rend plausible sans la prouver.
+
+*Comment l'application choisit aujourd'hui* (`Gpu::nouveau`, `src/rendu/mod.rs`) : `request_adapter` reçoit la surface de la première fenêtre (`compatible_surface`) et le reste par défaut, donc `power_preference: None`. Avec `None`, wgpu ne trie pas : il prend le premier adaptateur de l'énumération du backend (DX12) dont la surface est utilisable. Le critère « compatible avec la surface » écarte un adaptateur qui ne sait pas présenter ; on ne sait pas s'il écarte celui qui ne porte pas l'écran (à vérifier par la sonde). Ni l'écran qui porte les surcouches ni la préférence graphique ne sont consultés. Les variables `WGPU_POWER_PREF` et `WGPU_ADAPTER_NAME` n'ont aucun effet : `with_env()` ne lit que le backend, les drapeaux et les options de backend, et le code n'appelle ni `PowerPreference::from_env` ni `initialize_adapter_from_env`. Seul l'adaptateur retenu est écrit dans la sonde (« Sonde : adaptateur … »), pas la liste des adaptateurs.
+
+*Options et coût en rendu :*
+
+| Option | Principe | Coût et risques |
+|---|---|---|
+| G1. Préférence économe (`LowPower`) | Trier les adaptateurs en préférant l'intégré (Intel) | Une ligne de code. Le rendu est un plein écran très simple (voile, trou, bords adoucis) : l'Intel devrait suffire. Si les écrans sont bien sur l'Intel, la recopie disparaît. Si le système trie autrement, rien ne change. Sur une machine qui n'a qu'une carte, aucun effet. |
+| G2. Préférence performante (`HighPerformance`) | Préférer la carte discrète (Quadro) | Revient sans doute à l'état actuel. Utile surtout comme contre-épreuve. |
+| G3. Adaptateur qui porte les écrans | Interroger le système pour savoir quelle carte porte chaque écran, et prendre celle-là | Le plus sûr, mais le plus coûteux : il faut un appel système (DXGI sous Windows) dans la couche plateforme, du code `unsafe`, une version macOS, et un cas où les trois écrans sont répartis sur deux cartes (un adaptateur par écran). Ni winit ni wgpu ne donnent cette information. |
+| G4. Réglage système par application | Réglage Windows « Paramètres > Affichage > Graphiques » pour `souriso.exe` | Aucun code. Non fiable pour un installeur grand public, mais utile pour tester : à confirmer par la sonde que l'adaptateur change. |
+
+*Ce que le propriétaire doit tester pour valider (Windows) :*
+
+1. Relever l'adaptateur et le backend de la ligne de sonde au lancement (cas actuel : attendu Quadro P620, DX12).
+2. Relever la part d'un cœur logique, la part du noyau et le coût par image (méthode de W23) dans le cas actuel.
+3. Forcer l'adaptateur économe : par le réglage Windows de G4 (les variables `WGPU_*` sont sans effet dans le code actuel). Vérifier d'abord dans la sonde que l'adaptateur affiché est bien l'Intel ; sinon le test n'a rien mesuré.
+4. Refaire les mesures de l'étape 2 sur l'Intel. La piste est validée si la part du noyau et le coût par image baissent nettement, avec une apparence identique (W27) et sans échec d'acquisition (W25). Elle est écartée si elles ne bougent pas.
+5. Noter à quelle carte chaque écran est branché (Paramètres Windows > Affichage > Affichage avancé, ou la carte indiquée par écran) : c'est ce qui départage G1 et G3.
+
+*Ce qui change (version minimale, rien d'autre).* L'application lit `WGPU_ADAPTER_NAME` (fragment du nom, sans casse, parmi les adaptateurs qui peuvent présenter) puis `WGPU_POWER_PREF` (`low`, `high`, `none`). Sans l'une ni l'autre, le choix est celui d'avant (`PowerPreference::None`). Un nom sans correspondance est signalé dans la sonde et le choix par défaut s'applique. La sonde écrit en plus la liste des adaptateurs que wgpu énumère (nom, type intégré ou dédié, backend, présentation sur la surface possible ou impossible) et le type de l'adaptateur retenu. Aucune interrogation DXGI : la frontière système, la traversée des clics, la présentation par composition et le rendu visible ne sont pas touchés.
+
+*Constat dans `wgpu-hal` 30.0.1 (code, pas mesure).* Les capacités d'une surface DX12 ne dépendent pas de l'adaptateur : les modes alpha de la surface de composition sont les mêmes pour l'Intel et la Quadro, donc l'Intel peut en principe présenter. Pour la même raison, `compatible_surface` ne départage pas les cartes, et le défaut prend la première de l'énumération. À confirmer par la ligne « présentation sur la surface » de la sonde.
+
+*Résultat du test de l'adaptateur économe :* en attente du propriétaire.
+
+| # | Scénario | Attendu | Windows | macOS |
+|---|---|---|---|---|
+| W29 | Taux de rafraîchissement dans la sonde | Au lancement, chaque ligne « Sonde : écran N » indique un taux de rafraîchissement en Hz qui correspond aux réglages d'affichage du système (ou « inconnu » si le système ne le donne pas). Noter le taux de chacun des 3 écrans. L'application se comporte comme avant | non testé | non testé |
+| W30 | Adaptateur graphique (piste G) : trois lancements, chacun avec 60 s de mouvement continu, 3 écrans : défaut (aucune variable), `WGPU_POWER_PREF=low`, `WGPU_POWER_PREF=high` | Pour chaque lancement, noter la ligne « Sonde : adaptateur » (nom, type, backend), la part d'un cœur logique (méthode 1), la part du noyau et le coût par image (méthode 3). Contrôler d'abord la liste « adaptateur disponible » : les deux cartes y figurent et la présentation est « possible » pour l'Intel. Apparence identique (W27), sans échec d'acquisition (W25). Valide si noyau et coût par image baissent nettement avec un adaptateur autre que le défaut | non testé | non testé |
+
+### Vérifications automatiques
+
+- [x] Format, lint (`-D warnings`), 16 tests, frontière système et compilation release réussissent sous Linux ; le lint réussit aussi avec `--target x86_64-pc-windows-msvc` et `--target aarch64-apple-darwin` (vérification croisée, qui ne remplace pas W29).
+- [ ] La CI est verte sur Windows et sur macOS.
+
+### Cases à cocher (fix/cout-presentation-projecteur)
+
+- [ ] W29 : taux de rafraîchissement relevés pour chaque écran (Windows, macOS)
+- [ ] W30 : adaptateur graphique, trois lancements (défaut, low, high) mesurés (Windows)

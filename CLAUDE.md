@@ -31,6 +31,8 @@
 - Tout ce qui dépend d'un système vit dans la couche plateforme, nulle part ailleurs (y compris le raccourci global et la lecture du temps processeur).
 - Une surcouche par écran. Les effets implémentent `rendu::effet::Effet` et se déclarent dans `creer_effets` ; tous leurs paramètres sont dans `coeur::config::Config`.
 - La sonde écrit une ligne « Bilan » dans `souriso-sonde.txt` à la fermeture, et la réécrit toutes les 10 secondes (elle reste la dernière ligne) : durée, temps processeur (noyau et utilisateur), images par écran, réveils, lectures du curseur, échecs d'acquisition, reconfigurations.
+- La sonde écrit aussi, au lancement, la liste des adaptateurs graphiques que wgpu énumère (nom, type, backend, présentation possible sur la surface), l'adaptateur retenu et, par écran, son taux de rafraîchissement lu par le système.
+- L'adaptateur se choisit par `WGPU_ADAPTER_NAME` (fragment du nom) puis `WGPU_POWER_PREF` (`low`, `high`, `none`) ; sans elles, le choix par défaut de wgpu s'applique.
 - Aucun droit administrateur ne doit être requis sous Windows.
 
 ## Fonctions dépendant du système
