@@ -24,9 +24,12 @@ pub struct Gpu {
 
 impl Gpu {
     /// Choisit l'adaptateur compatible avec la surface de la première fenêtre et la renvoie.
+    /// `cartes` donne, par écran (le principal en premier), la carte qui le porte si le système
+    /// la connaît.
     pub fn nouveau(
         affichage: OwnedDisplayHandle,
         premiere: &Arc<Window>,
+        cartes: &[Option<String>],
     ) -> Result<(Self, wgpu::Surface<'static>), String> {
         let instance =
             wgpu::Instance::new(crate::plateforme::options_instance(affichage).with_env());
@@ -35,23 +38,42 @@ impl Gpu {
             .map_err(|e| format!("création de la surface : {e}"))?;
         let mut adaptateurs =
             pollster::block_on(instance.enumerate_adapters(wgpu::Backends::all()));
-        let candidats: Vec<(String, bool)> = adaptateurs
+        let candidats: Vec<Candidat> = adaptateurs
             .iter()
-            .map(|a| (a.get_info().name, a.is_surface_supported(&surface)))
+            .map(|a| {
+                let infos = a.get_info();
+                Candidat {
+                    nom: infos.name,
+                    type_: infos.device_type,
+                    presente: a.is_surface_supported(&surface),
+                }
+            })
             .collect();
-        for (indice, (a, (_, presente))) in adaptateurs.iter().zip(&candidats).enumerate() {
-            let infos = a.get_info();
+        for (indice, (a, candidat)) in adaptateurs.iter().zip(&candidats).enumerate() {
             crate::sonde::ecrire(&format!(
                 "Sonde : adaptateur disponible {indice} : « {} », type {}, backend {:?}, \
                  présentation sur la surface {}",
-                infos.name,
-                type_adaptateur(infos.device_type),
-                infos.backend,
-                if *presente { "possible" } else { "impossible" }
+                candidat.nom,
+                type_adaptateur(candidat.type_),
+                a.get_info().backend,
+                if candidat.presente {
+                    "possible"
+                } else {
+                    "impossible"
+                }
             ));
         }
-        // `WGPU_ADAPTER_NAME` prime sur `WGPU_POWER_PREF`. Sans l'une ni l'autre, le choix reste
-        // celui de wgpu (`PowerPreference::None`, premier adaptateur compatible).
+        for (indice, carte) in cartes.iter().enumerate() {
+            crate::sonde::ecrire(&format!(
+                "Sonde : écran {indice} porté par la carte {}",
+                match carte {
+                    Some(nom) => format!("« {nom} »"),
+                    None => "inconnue".to_string(),
+                }
+            ));
+        }
+        // Ordre de priorité : `WGPU_ADAPTER_NAME`, puis `WGPU_POWER_PREF`, puis la carte qui porte
+        // l'écran principal, puis le choix de wgpu.
         let par_nom = std::env::var("WGPU_ADAPTER_NAME")
             .ok()
             .filter(|nom| !nom.is_empty())
@@ -64,26 +86,55 @@ impl Gpu {
                     ));
                 }
                 indice
-            })
-            .map(|indice| adaptateurs.swap_remove(indice));
-        let adapter = match par_nom {
-            Some(adapter) => adapter,
-            None => pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::from_env().unwrap_or_default(),
-                compatible_surface: Some(&surface),
-                ..Default::default()
-            }))
-            .map_err(|e| format!("aucun adaptateur graphique : {e}"))?,
+            });
+        let preference = wgpu::PowerPreference::from_env();
+        let (indice, mut critere) = if let Some(indice) = par_nom {
+            (Some(indice), Critere::VariableNom)
+        } else if preference.is_some() {
+            (None, Critere::VariablePreference)
+        } else if let Some(indice) = indice_carte_des_ecrans(&candidats, cartes) {
+            (Some(indice), Critere::CarteDesEcrans)
+        } else {
+            (None, Critere::ChoixWgpu)
+        };
+        let adapter = match indice {
+            Some(indice) => adaptateurs.swap_remove(indice),
+            None => {
+                let retenu =
+                    pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+                        power_preference: preference.unwrap_or_default(),
+                        compatible_surface: Some(&surface),
+                        ..Default::default()
+                    }))
+                    .map_err(|e| format!("aucun adaptateur graphique : {e}"))?;
+                // Le pilote logiciel (type processeur) ne sert que faute de mieux.
+                let sans_processeur = match critere {
+                    Critere::ChoixWgpu
+                        if retenu.get_info().device_type == wgpu::DeviceType::Cpu =>
+                    {
+                        indice_hors_processeur(&candidats)
+                    }
+                    _ => None,
+                };
+                match sans_processeur {
+                    Some(indice) => {
+                        critere = Critere::ChoixWgpuSansProcesseur;
+                        adaptateurs.swap_remove(indice)
+                    }
+                    None => retenu,
+                }
+            }
         };
         let (device, queue) =
             pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
                 .map_err(|e| format!("périphérique graphique : {e}"))?;
         let infos = adapter.get_info();
         crate::sonde::ecrire(&format!(
-            "Sonde : adaptateur « {} », type {}, backend {:?}",
+            "Sonde : adaptateur « {} », type {}, backend {:?}, critère : {}",
             infos.name,
             type_adaptateur(infos.device_type),
-            infos.backend
+            infos.backend,
+            critere.libelle()
         ));
         Ok((
             Gpu {
@@ -109,12 +160,64 @@ impl Gpu {
     }
 }
 
+/// Adaptateur énuméré par wgpu, tel que la sonde et le choix le voient.
+struct Candidat {
+    nom: String,
+    type_: wgpu::DeviceType,
+    presente: bool,
+}
+
+/// Ce qui a décidé de l'adaptateur, pour la sonde.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Critere {
+    VariableNom,
+    VariablePreference,
+    CarteDesEcrans,
+    ChoixWgpu,
+    ChoixWgpuSansProcesseur,
+}
+
+impl Critere {
+    fn libelle(self) -> &'static str {
+        match self {
+            Critere::VariableNom => "variable WGPU_ADAPTER_NAME",
+            Critere::VariablePreference => "variable WGPU_POWER_PREF",
+            Critere::CarteDesEcrans => "carte qui porte les écrans",
+            Critere::ChoixWgpu => "choix de wgpu",
+            Critere::ChoixWgpuSansProcesseur => "choix de wgpu, pilote logiciel écarté",
+        }
+    }
+}
+
 /// Premier adaptateur pouvant présenter dont le nom contient `voulu`, sans tenir compte de la casse.
-fn indice_par_nom(candidats: &[(String, bool)], voulu: &str) -> Option<usize> {
+fn indice_par_nom(candidats: &[Candidat], voulu: &str) -> Option<usize> {
     let voulu = voulu.to_lowercase();
     candidats
         .iter()
-        .position(|(nom, presente)| *presente && nom.to_lowercase().contains(&voulu))
+        .position(|c| c.presente && c.nom.to_lowercase().contains(&voulu))
+}
+
+/// Premier adaptateur pouvant présenter qui n'est pas un pilote logiciel (type processeur).
+fn indice_hors_processeur(candidats: &[Candidat]) -> Option<usize> {
+    candidats
+        .iter()
+        .position(|c| c.presente && c.type_ != wgpu::DeviceType::Cpu)
+}
+
+/// Adaptateur qui correspond à la carte de l'écran principal (le premier de `cartes`). Si les
+/// écrans sont répartis entre plusieurs cartes, celle du principal l'emporte. `None` si le
+/// système n'a pas donné cette carte ou si aucun adaptateur qui peut présenter ne lui correspond.
+fn indice_carte_des_ecrans(candidats: &[Candidat], cartes: &[Option<String>]) -> Option<usize> {
+    let carte = cartes.first()?.as_ref()?.trim().to_lowercase();
+    if carte.is_empty() {
+        return None;
+    }
+    candidats.iter().position(|c| {
+        let nom = c.nom.trim().to_lowercase();
+        c.presente
+            && c.type_ != wgpu::DeviceType::Cpu
+            && (nom == carte || nom.contains(&carte) || carte.contains(&nom))
+    })
 }
 
 /// Type d'adaptateur pour la sonde.
@@ -302,12 +405,29 @@ impl Rendu {
 mod tests {
     use super::*;
 
-    fn candidats() -> Vec<(String, bool)> {
+    fn candidat(nom: &str, type_: wgpu::DeviceType, presente: bool) -> Candidat {
+        Candidat {
+            nom: nom.to_string(),
+            type_,
+            presente,
+        }
+    }
+
+    fn candidats() -> Vec<Candidat> {
         vec![
-            ("NVIDIA Quadro P620".to_string(), true),
-            ("Intel(R) UHD Graphics".to_string(), true),
-            ("Intel(R) Iris".to_string(), false),
+            candidat("NVIDIA Quadro P620", wgpu::DeviceType::DiscreteGpu, true),
+            candidat(
+                "Intel(R) UHD Graphics",
+                wgpu::DeviceType::IntegratedGpu,
+                true,
+            ),
+            candidat("Intel(R) Iris", wgpu::DeviceType::IntegratedGpu, false),
+            candidat("Microsoft Basic Render Driver", wgpu::DeviceType::Cpu, true),
         ]
+    }
+
+    fn cartes(noms: &[Option<&str>]) -> Vec<Option<String>> {
+        noms.iter().map(|n| n.map(str::to_string)).collect()
     }
 
     #[test]
@@ -316,6 +436,58 @@ mod tests {
         assert_eq!(indice_par_nom(&candidats(), "QUADRO"), Some(0));
         assert_eq!(indice_par_nom(&candidats(), "iris"), None);
         assert_eq!(indice_par_nom(&candidats(), "amd"), None);
+    }
+
+    #[test]
+    fn la_carte_de_l_ecran_principal_est_retenue() {
+        let intel = cartes(&[Some("Intel(R) UHD Graphics"), Some("NVIDIA Quadro P620")]);
+        let quadro = cartes(&[Some("NVIDIA Quadro P620"), Some("Intel(R) UHD Graphics")]);
+        assert_eq!(indice_carte_des_ecrans(&candidats(), &intel), Some(1));
+        assert_eq!(indice_carte_des_ecrans(&candidats(), &quadro), Some(0));
+    }
+
+    #[test]
+    fn sans_avis_du_systeme_ou_sans_correspondance_le_choix_revient_a_wgpu() {
+        assert_eq!(indice_carte_des_ecrans(&candidats(), &[]), None);
+        assert_eq!(
+            indice_carte_des_ecrans(&candidats(), &cartes(&[None])),
+            None
+        );
+        assert_eq!(
+            indice_carte_des_ecrans(&candidats(), &cartes(&[Some("AMD Radeon")])),
+            None
+        );
+        // Une carte qui ne peut pas présenter n'est pas retenue.
+        assert_eq!(
+            indice_carte_des_ecrans(&candidats(), &cartes(&[Some("Intel(R) Iris")])),
+            None
+        );
+    }
+
+    #[test]
+    fn le_pilote_logiciel_n_est_jamais_retenu_par_la_carte_des_ecrans() {
+        let logiciel = cartes(&[Some("Microsoft Basic Render Driver")]);
+        assert_eq!(indice_carte_des_ecrans(&candidats(), &logiciel), None);
+    }
+
+    #[test]
+    fn le_premier_adaptateur_hors_processeur_qui_presente_est_cherche() {
+        assert_eq!(indice_hors_processeur(&candidats()), Some(0));
+        let seul = vec![candidat(
+            "Microsoft Basic Render Driver",
+            wgpu::DeviceType::Cpu,
+            true,
+        )];
+        assert_eq!(indice_hors_processeur(&seul), None);
+    }
+
+    #[test]
+    fn le_critere_se_dit_en_francais() {
+        assert_eq!(
+            Critere::CarteDesEcrans.libelle(),
+            "carte qui porte les écrans"
+        );
+        assert_eq!(Critere::VariableNom.libelle(), "variable WGPU_ADAPTER_NAME");
     }
 
     #[test]

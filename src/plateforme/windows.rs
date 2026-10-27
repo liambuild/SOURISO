@@ -3,6 +3,11 @@
 use std::time::Duration;
 
 use windows_sys::Win32::Foundation::{FILETIME, POINT};
+use windows_sys::Win32::Graphics::Gdi::{
+    EnumDisplayDevicesW, EnumDisplaySettingsW, DEVMODEW, DISPLAY_DEVICEW,
+    DISPLAY_DEVICE_ATTACHED_TO_DESKTOP, DISPLAY_DEVICE_MIRRORING_DRIVER, DM_POSITION,
+    ENUM_CURRENT_SETTINGS,
+};
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
 use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
 use winit::event_loop::{ActiveEventLoop, EventLoop, OwnedDisplayHandle};
@@ -46,6 +51,57 @@ pub fn options_instance(affichage: OwnedDisplayHandle) -> wgpu::InstanceDescript
     options.backends = wgpu::Backends::DX12;
     options.backend_options.dx12.presentation_system = wgpu::Dx12SwapchainKind::DxgiFromVisual;
     options
+}
+
+/// Carte graphique qui porte chaque écran, dans l'ordre de `ecrans`. `EnumDisplayDevicesW` liste
+/// les sorties du bureau avec le nom de la carte qui les porte ; on rapproche chaque sortie de
+/// l'écran de même position (pixels physiques, comme winit). `None` pour un écran introuvable.
+pub fn cartes_ecrans(ecrans: &[Ecran]) -> Vec<Option<String>> {
+    let mut sorties: Vec<((i32, i32), String)> = Vec::new();
+    for indice in 0.. {
+        let mut sortie = DISPLAY_DEVICEW {
+            cb: std::mem::size_of::<DISPLAY_DEVICEW>() as u32,
+            ..Default::default()
+        };
+        // SAFETY : `sortie` est valide et exclusive, `cb` est renseigné ; le premier argument
+        // nul demande les sorties de la machine et non les moniteurs d'une sortie.
+        if unsafe { EnumDisplayDevicesW(std::ptr::null(), indice, &mut sortie, 0) } == 0 {
+            break;
+        }
+        let etat = sortie.StateFlags;
+        if etat & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP == 0
+            || etat & DISPLAY_DEVICE_MIRRORING_DRIVER != 0
+        {
+            continue;
+        }
+        let mut mode = DEVMODEW {
+            dmSize: std::mem::size_of::<DEVMODEW>() as u16,
+            ..Default::default()
+        };
+        // SAFETY : `DeviceName` est terminé par un zéro et `mode` est valide et exclusif.
+        let ok = unsafe {
+            EnumDisplaySettingsW(sortie.DeviceName.as_ptr(), ENUM_CURRENT_SETTINGS, &mut mode)
+        };
+        if ok == 0 || mode.dmFields & DM_POSITION == 0 {
+            continue;
+        }
+        // SAFETY : `DM_POSITION` est posé, c'est donc la variante « affichage » de l'union.
+        let position = unsafe { mode.Anonymous1.Anonymous2.dmPosition };
+        let carte = String::from_utf16_lossy(&sortie.DeviceString);
+        sorties.push((
+            (position.x, position.y),
+            carte.trim_end_matches('\0').to_string(),
+        ));
+    }
+    ecrans
+        .iter()
+        .map(|ecran| {
+            sorties
+                .iter()
+                .find(|(position, _)| *position == ecran.origine)
+                .map(|(_, carte)| carte.clone())
+        })
+        .collect()
 }
 
 /// `GetCursorPos` renvoie des pixels physiques du bureau virtuel (processus sensible au DPI,
