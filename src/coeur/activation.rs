@@ -5,6 +5,14 @@ use std::collections::HashSet;
 
 /// Nom de l'effet projecteur.
 pub const PROJECTEUR: &str = "projecteur";
+/// Nom de l'effet anneau.
+pub const ANNEAU: &str = "anneau";
+/// Nom de l'effet traînée.
+pub const TRAINEE: &str = "trainee";
+/// Nom de l'effet ondulation au clic.
+pub const ONDULATION: &str = "ondulation";
+/// Nom du son de clic : pas un effet de rendu, mais activable de la même façon.
+pub const SON: &str = "son";
 
 /// Tous les effets sont actifs au départ : seuls les effets coupés sont mémorisés.
 #[derive(Debug, Default)]
