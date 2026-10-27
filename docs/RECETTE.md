@@ -241,3 +241,40 @@ Les taux de rafraîchissement des écrans ne sont pas connus, et la piste E (pla
 
 - [ ] W29 : taux de rafraîchissement relevés pour chaque écran (Windows, macOS)
 - [ ] W30 : adaptateur graphique, trois lancements (défaut, low, high) mesurés (Windows)
+
+## fix/adaptateur-par-defaut
+
+Sans variable d'environnement, l'application rendait sur la Quadro P620 (choix de wgpu) alors que les écrans sont portés par l'Intel UHD : forcer l'Intel par son nom a fait passer le processeur en mouvement continu de 6 à 11 % à 4,0 % d'un cœur logique (seuil S3 : 3 %). Le coût par image sur la Quadro était de 1,2 à 1,5 ms, dont 57 % de temps noyau, cohérent avec une recopie entre cartes.
+
+**Ce qui change.** Par défaut, l'application choisit la carte qui porte l'écran principal, demandée à la couche plateforme (`plateforme::cartes_ecrans`). Ordre complet, mécanisme et limites : `docs/ARCHITECTURE.md`, 4.2. Les variables `WGPU_ADAPTER_NAME` et `WGPU_POWER_PREF` restent prioritaires. Le pilote logiciel (type processeur) n'est retenu que faute d'autre carte. La sonde écrit, par écran, la carte qui le porte (« Sonde : écran N porté par la carte … ») et le critère décisif dans la ligne « Sonde : adaptateur … critère : … ». Rien ne change dans le rendu visible, la traversée des clics, la présentation par composition ni l'enchaînement par image.
+
+**Anomalie à vérifier (W34).** L'énumération de la sonde donne l'Intel typé « intégré », avec présentation possible. Dans `wgpu-core` 30.0.1, `LowPower` trie pourtant l'intégré avant le dédié ; `WGPU_POWER_PREF=low` devrait donc retenir l'Intel. Le propriétaire soupçonne un fichier de sonde issu de cet essai citant la Quadro, sans résultat confirmé. Non corrigée dans cette MR : la cause n'est pas établie.
+
+### Fonctions de la couche plateforme (modifiée)
+
+| Fonction | Windows | macOS |
+|---|---|---|
+| `cartes_ecrans` (carte qui porte chaque écran) | non testé (`EnumDisplayDevicesW`, `EnumDisplaySettingsW`) | sans objet : aucun avis, comportement inchangé (non testé) |
+
+| # | Scénario | Attendu | Windows | macOS |
+|---|---|---|---|---|
+| W31 | Re-mesure par défaut : lancer sans aucune variable `WGPU_*`, puis 60 s de mouvement continu, 3 écrans | La liste « adaptateur disponible » montre les trois adaptateurs ; chaque ligne « écran N porté par la carte » cite l'Intel UHD ; la ligne « Sonde : adaptateur » cite l'Intel UHD (intégré) avec le critère « carte qui porte les écrans ». Noter la part d'un cœur logique (méthode 1), la part du noyau et le coût par image (méthode 3). Valide si l'on retrouve environ 4 % d'un cœur et un coût par image nettement plus bas que sur la Quadro (1,2 à 1,5 ms, 57 % de noyau), apparence identique (W27), sans échec d'acquisition (W25) | non testé | sans objet |
+| W32 | Poste fixe dont la carte dédiée porte les écrans (intégrée active, ou absente) | Chaque écran est dit porté par la carte dédiée ; la ligne « Sonde : adaptateur » cite la dédiée avec le critère « carte qui porte les écrans » ; processeur et coût par image au moins aussi bons qu'avec l'intégrée forcée par `WGPU_ADAPTER_NAME` | non testé | sans objet |
+| W33 | Priorité des variables : lancer avec `WGPU_ADAPTER_NAME=Quadro`, puis avec `WGPU_POWER_PREF=high`, puis avec un nom inexistant | Le critère de la sonde est « variable WGPU_ADAPTER_NAME », puis « variable WGPU_POWER_PREF » ; avec un nom inexistant, la sonde le signale et le choix suit les étapes suivantes | non testé | non testé |
+| W34 | Anomalie : `WGPU_POWER_PREF=low`, sans `WGPU_ADAPTER_NAME` | La ligne « Sonde : adaptateur » cite l'Intel UHD. Si elle cite la Quadro : conserver le fichier de sonde (liste des adaptateurs comprise) et le joindre au signalement | non testé | non testé |
+| W35 | Écrans répartis entre deux cartes (si le matériel existe) | Chaque ligne « écran N porté par la carte » donne la carte réelle ; l'adaptateur retenu est celui de l'écran principal ; noter le coût des écrans de l'autre carte | non testé | sans objet |
+| W36 | macOS : lancement sans variable | Aucune ligne de carte par écran utile (« inconnue ») ; critère « choix de wgpu » ; comportement et apparence inchangés | sans objet | non testé |
+
+### Vérifications automatiques
+
+- [x] Format, lint (`-D warnings`), 21 tests, frontière système et compilation release réussissent sous Linux ; le lint réussit aussi avec `--target x86_64-pc-windows-msvc` et `--target aarch64-apple-darwin` (vérification croisée, qui ne remplace pas W31).
+- [ ] La CI est verte sur Windows et sur macOS.
+
+### Cases à cocher (fix/adaptateur-par-defaut)
+
+- [ ] W31 : re-mesure par défaut, ligne d'adaptateur = Intel (Windows)
+- [ ] W32 : poste fixe, carte dédiée qui porte les écrans (Windows, non testé)
+- [ ] W33 : priorité des variables (Windows)
+- [ ] W34 : anomalie `WGPU_POWER_PREF=low` (Windows)
+- [ ] W35 : écrans répartis entre deux cartes (Windows, si le matériel existe)
+- [ ] W36 : macOS inchangé

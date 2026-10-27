@@ -157,6 +157,7 @@ Contrat de la couche plateforme :
 | Clics | Flux d'événements : bouton, appui ou relâchement, position normalisée. |
 | Surfaces | Création d'une surcouche par écran : transparente, passe-clics, au-dessus de tout, visible dans les apps en plein écran, jamais exclue de la capture. |
 | Permissions | État modélisé (accordée, refusée, inconnue) et demande, par capacité. Un refus est un état, pas une exception. |
+| Cartes graphiques | Nom de la carte qui porte chaque écran, si le système le donne (sinon aucun avis). Sert au choix de l'adaptateur graphique (section 4.2). |
 | Son | Lecture d'un son à faible latence. |
 | Cycle de vie | Lancement au démarrage de session, icône de barre de menus ou de zone de notification. |
 
@@ -167,6 +168,35 @@ Règles de la frontière, vérifiables mécaniquement :
 3. Chaque fonction d'un adaptateur a une ligne dans `docs/RECETTE.md`, par système, avec « testé » ou « non testé ».
 4. Les conversions de coordonnées et d'échelle sont faites dans l'adaptateur, et nulle part ailleurs.
 5. Un adaptateur peut être remplacé par un adaptateur natif complet (surcouche comprise) sans toucher au cœur ni à l'interface.
+
+### 4.2 Choix de l'adaptateur graphique
+
+Sur une machine à deux cartes, rendre sur une carte qui ne porte pas les écrans oblige le système à recopier chaque image d'une carte à l'autre : du temps noyau et un coût par image plus élevés (relevé du propriétaire sur Windows : Quadro P620 dédiée, Intel UHD intégrée qui porte les écrans ; mesures à refaire, voir `docs/RECETTE.md`, W31).
+
+Ordre de décision, du plus prioritaire au moins prioritaire. La sonde écrit le critère qui a décidé dans la ligne « Sonde : adaptateur » :
+
+1. `WGPU_ADAPTER_NAME` (fragment du nom, sans casse, parmi les adaptateurs qui peuvent présenter). Critère : « variable WGPU_ADAPTER_NAME ».
+2. `WGPU_POWER_PREF` (`low`, `high`, `none`), transmise à wgpu. Critère : « variable WGPU_POWER_PREF ».
+3. **La carte qui porte l'écran principal**, donnée par la couche plateforme (`plateforme::cartes_ecrans`) et rapprochée d'un adaptateur wgpu par son nom. Elle n'est retenue que si elle peut présenter sur la surface et si ce n'est pas un pilote logiciel. Critère : « carte qui porte les écrans ».
+4. Sinon, le choix de wgpu (`PowerPreference::None`, premier adaptateur compatible avec la surface). Si wgpu tombe sur un pilote logiciel (type processeur, par exemple le « Microsoft Basic Render Driver ») alors qu'un autre adaptateur peut présenter, le premier de ceux-là est retenu. Critère : « choix de wgpu » ou « choix de wgpu, pilote logiciel écarté ».
+
+Le pilote logiciel n'est jamais retenu aux étapes 3 et 4 tant qu'une autre carte peut présenter. Un nom donné par `WGPU_ADAPTER_NAME` reste un choix explicite et n'est pas filtré.
+
+**Mécanisme par système.**
+
+- *Windows.* `EnumDisplayDevicesW` liste les sorties actives du bureau avec le nom de la carte qui les porte ; `EnumDisplaySettingsW` donne la position de chaque sortie, rapprochée de l'origine de l'écran (pixels physiques). Deux appels de `user32` via `windows-sys`, sans COM ni DXGI. Le nom de la carte est rapproché de celui de wgpu par égalité ou inclusion, sans casse. Les deux noms viennent de la même description du pilote ; un désaccord de libellé conduit à l'étape 4, jamais à un échec.
+- *macOS.* La couche plateforme ne donne pas d'avis : le comportement est celui de l'étape 4.
+- *Factice (Linux).* Aucun avis.
+
+**Limites.**
+
+- *Poste fixe.* L'heuristique suit la carte qui porte les écrans, quelle qu'elle soit : sur un poste fixe dont la carte dédiée porte les écrans, c'est la dédiée qui est retenue (et non l'intégrée, même si elle est active et peut présenter). Ce cas n'a pas été mesuré (« non testé », W32).
+- *Écrans répartis entre plusieurs cartes.* Une seule carte rend pour tous les écrans (un seul périphérique, section « Rendu »). On retient celle de l'écran principal ; les écrans portés par l'autre carte paient la recopie. Un adaptateur par écran demanderait un périphérique par carte, hors de cette modification. La sonde donne la carte de chaque écran, ce qui rend le cas visible.
+- *Rapprochement par nom.* Deux cartes de même nom (deux cartes identiques) ne se distinguent pas : la première énumérée est retenue.
+- *Écran dont la carte est inconnue* (sortie virtuelle, bureau à distance, système muet) : si c'est l'écran principal, on retombe sur l'étape 4.
+- *Observée, non expliquée.* `WGPU_POWER_PREF=low` aurait retenu la Quadro chez le propriétaire (W34).
+
+**À prévoir.** Un réglage de l'adaptateur (automatique, économe, performant) rejoindra la fenêtre de réglages du prompt 5. « Automatique » est le comportement ci-dessus ; les deux autres reprennent `WGPU_POWER_PREF`.
 
 ## 5. Risques
 
