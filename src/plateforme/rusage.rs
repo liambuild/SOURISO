@@ -2,7 +2,9 @@
 
 use std::time::Duration;
 
-pub fn temps_processeur() -> Option<Duration> {
+use super::TempsProcesseur;
+
+pub fn temps_processeur() -> Option<TempsProcesseur> {
     // SAFETY : `rusage` est une structure de nombres, valide une fois mise à zéro, et exclusive
     // pour la durée de l'appel.
     let usage = unsafe {
@@ -14,5 +16,8 @@ pub fn temps_processeur() -> Option<Duration> {
     };
     let duree =
         |t: libc::timeval| Duration::new(t.tv_sec.max(0) as u64, (t.tv_usec.max(0) as u32) * 1000);
-    Some(duree(usage.ru_utime) + duree(usage.ru_stime))
+    Some(TempsProcesseur {
+        noyau: duree(usage.ru_stime),
+        utilisateur: duree(usage.ru_utime),
+    })
 }

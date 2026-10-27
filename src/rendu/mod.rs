@@ -70,6 +70,13 @@ impl Gpu {
     }
 }
 
+/// Acquisitions d'image qui ont échoué, pour la sonde.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Statistiques {
+    pub echecs_acquisition: u64,
+    pub reconfigurations: u64,
+}
+
 /// Rendu d'une surcouche : la surface d'un écran et les effets qui s'y dessinent.
 pub struct Rendu {
     surface: wgpu::Surface<'static>,
@@ -77,6 +84,7 @@ pub struct Rendu {
     device: wgpu::Device,
     queue: wgpu::Queue,
     effets: Vec<Box<dyn Effet>>,
+    statistiques: Statistiques,
 }
 
 impl Rendu {
@@ -142,7 +150,12 @@ impl Rendu {
             device: gpu.device.clone(),
             queue: gpu.queue.clone(),
             effets: creer_effets(&gpu.device, &sortie, reglages),
+            statistiques: Statistiques::default(),
         })
+    }
+
+    pub fn statistiques(&self) -> Statistiques {
+        self.statistiques
     }
 
     pub fn redimensionner(&mut self, largeur: u32, hauteur: u32) {
@@ -155,16 +168,35 @@ impl Rendu {
     }
 
     /// Dessine les effets actifs. Sans effet actif, l'image reste transparente.
-    /// `curseur` est la position sur cet écran, ou `None` s'il est ailleurs.
+    /// `lire_curseur` donne la position sur cet écran, ou `None` s'il est ailleurs. Elle est
+    /// appelée une fois l'image acquise, car l'acquisition peut attendre le rafraîchissement de
+    /// l'écran : la position dessinée est ainsi la plus récente possible.
     /// Renvoie vrai si l'image a été présentée.
     pub fn dessiner(
         &mut self,
         ecran: &Ecran,
-        curseur: Option<Point>,
+        lire_curseur: impl FnOnce() -> Option<Point>,
         activations: &Activations,
     ) -> bool {
+        let texture = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(t)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
+            // Rien à reconfigurer : l'image est sautée et la boucle réessaie à son prochain passage.
+            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                self.statistiques.echecs_acquisition += 1;
+                return false;
+            }
+            // Surface périmée ou perdue : seule une reconfiguration la remet en état.
+            _ => {
+                self.statistiques.echecs_acquisition += 1;
+                self.statistiques.reconfigurations += 1;
+                self.surface.configure(&self.device, &self.config);
+                return false;
+            }
+        };
+
         let contexte = Contexte {
-            curseur,
+            curseur: lire_curseur(),
             echelle: ecran.echelle as f32,
         };
         for effet in &mut self.effets {
@@ -173,14 +205,6 @@ impl Rendu {
             }
         }
 
-        let texture = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(t)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
-            _ => {
-                self.surface.configure(&self.device, &self.config);
-                return false;
-            }
-        };
         let vue = texture.texture.create_view(&Default::default());
         let mut encodeur = self.device.create_command_encoder(&Default::default());
         {
