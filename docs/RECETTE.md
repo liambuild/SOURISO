@@ -278,3 +278,72 @@ Sans variable d'environnement, l'application rendait sur la Quadro P620 (choix d
 - [ ] W34 : anomalie `WGPU_POWER_PREF=low` (Windows)
 - [ ] W35 : écrans répartis entre deux cartes (Windows, si le matériel existe)
 - [ ] W36 : macOS inchangé
+
+## feat/effets-clic
+
+Quatre effets s'ajoutent au projecteur : anneau, traînée, ondulation au clic (rendus distincts pour le clic gauche et le clic droit) et son de clic. Chacun s'active et se coupe indépendamment au clavier (Ctrl + Alt + Maj + P projecteur, A anneau, T traînée, O ondulation, S son) ; leurs paramètres sont dans `coeur::config::Config`, sans interface de réglage. Mécanisme, budget et limites : `docs/ARCHITECTURE.md` (section 9), sons : `docs/SONS.md`.
+
+**Rien de ce qui suit n'est mesuré ni testé sous Windows ou macOS.** Les chiffres de coût sont à relever par le propriétaire.
+
+**Limites assumées, à constater en recette.**
+
+- Les clics sont lus par interrogation des boutons toutes les 8 ms : **un appui plus court que cette période peut être manqué** (ni ondulation ni son).
+- Un son qui arrive pendant un autre **coupe le précédent**.
+- **La latence entre le clic et le son est inconnue** : elle dépend du système, du pilote audio et du premier appel (initialisation du lecteur). À mesurer (W46).
+- Un clic maintenu ne donne qu'une ondulation et qu'un son (front d'appui).
+- Au plus 8 ondulations simultanées par écran ; au-delà, la plus ancienne disparaît. Au plus 128 points de traînée.
+- Sur une surface sans alpha prémultiplié (repli `PostMultiplied`), les effets ne se mélangent pas : le dernier écrase les autres (déjà noté dans `rendu::effet::Sortie`).
+
+**Budget de coût (structurel, retenu avec le propriétaire).** Une seule présentation par écran et par image, tous les effets dans la même passe ; aucune image tant que rien ne change ; les animations ne demandent des images que pendant leur durée ; S4 sous 1 % d'un cœur logique. S3 n'est pas visé par cette modification : il est déjà dépassé avec le projecteur seul (4,0 à 5,3 % sur l'Intel) et ses seuils seront révisés dans une modification séparée. On vise seulement à ne pas faire monter ce coût de façon notable.
+
+### Fonctions de la couche plateforme (nouvelles ou modifiées)
+
+| Fonction | Windows | macOS |
+|---|---|---|
+| `boutons` (état des boutons gauche et droit, sens logique) | non testé (`GetAsyncKeyState`, `GetSystemMetrics(SM_SWAPBUTTON)`) | non testé (`CGEventSourceButtonState`, aucune invite attendue) |
+| `jouer_son` (WAV en mémoire, asynchrone) | non testé (`PlaySoundW`) | non testé (`NSSound`) |
+| `creer_raccourcis` (cinq raccourcis, un seul gestionnaire) | non testé | non testé |
+
+| # | Scénario | Attendu | Windows | macOS |
+|---|---|---|---|---|
+| W37 | Cumul : les cinq effets actifs, curseur en mouvement puis clics gauche et droit | Voile, traînée, anneau et ondulation se superposent sans fond noir ni cadre ; l'ordre est voile < traînée < anneau < ondulation ; le centre de l'écran reste lisible | non testé | non testé |
+| W38 | Anneau : taille, épaisseur, couleur, opacité (modifier `Config::default`, recompiler) | L'anneau est centré sur le curseur à ± 1 px logique, à 100 % et 150 % d'échelle, y compris au franchissement de la jonction de deux écrans (S10) ; bords adoucis (S15) | non testé | non testé |
+| W39 | Traînée : longueur et durée de fondu | La traînée suit le chemin sans trous aux mouvements rapides, s'efface en environ `duree_fondu` après l'arrêt, est plus courte quand le fondu est plus rapide. Après l'arrêt du curseur elle disparaît complètement (aucun résidu) | non testé | non testé |
+| W40 | Ondulation : clic gauche puis clic droit | Gauche : un anneau bleu sur un léger disque. Droit : deux anneaux concentriques orange. Les deux s'élargissent en s'effaçant puis disparaissent sans coupure sèche | non testé | non testé |
+| W41 | Clic maintenu 2 s | Une seule ondulation et un seul son au moment de l'appui. Dans le bilan : clics gauche + 1, sons joués + 1 | non testé | non testé |
+| W42 | Clics rapides répétés : 20 clics en 3 s, puis 10 clics en 1 s, gauche et droit mélangés | Pas de blocage ni de retard cumulé ; au plus 8 ondulations visibles à la fois ; le son se coupe et se relance sans crépitement gênant (limite acceptée : un son coupe le précédent). Comparer le nombre de clics faits au bilan : noter les clics manqués | non testé | non testé |
+| W43 | Boutons de la souris permutés (Paramètres Windows > Bluetooth et appareils > Souris > Bouton principal : Droit) | Le clic fait avec le bouton qui est le « gauche » pour l'utilisateur donne le rendu gauche et compte dans « clics gauche » ; l'autre le rendu droit | non testé | sans objet |
+| W44 | Clic très bref (tapotement sur un pavé tactile ou une souris à très faible durée d'appui) | Constater si certains clics sont manqués (limite acceptée : appui plus court que 8 ms). Noter la proportion | non testé | non testé |
+| W45 | Désactivation effet par effet : Ctrl + Alt + Maj + A, T, O, S, P, chacun deux fois | Chaque raccourci coupe puis rétablit uniquement son effet (ligne « Anneau coupé », etc. dans la sonde) ; les autres ne changent pas ; effet coupé = plus d'image demandée pour lui (si tout est coupé, le nombre d'images par écran ne bouge plus). Une combinaison refusée par le système est signalée dans la sonde sans empêcher les autres | non testé | non testé |
+| W46 | Son : volume, choix, latence | Le son est audible au volume réglé ; changer `Config::son.choix` (clic, bulle, cloche) et `volume` change ce qu'on entend. Mesurer l'écart clic → son (enregistrement écran + audio, comme R10) et noter le premier son après le lancement séparément des suivants. Rapporter si la latence gêne | non testé | non testé |
+| W47 | Plusieurs écrans : clics sur chacun | L'ondulation apparaît sur l'écran où est le curseur, centrée sur le clic (à ± 1 px logique) ; un seul son par clic, quel que soit le nombre d'écrans | non testé | non testé |
+| W48 | S3, mouvement continu 60 s avec **tous** les effets actifs, mêmes conditions que W31 | Noter la part d'un cœur logique (méthode de W7, ligne « Bilan ») et la comparer au projecteur seul (4,0 à 5,3 % sur l'Intel). **Attendu : pas de hausse notable.** Le seuil de 3 % n'est pas l'objectif ici. Noter aussi les images/s (S1) : la cadence doit rester celle du projecteur seul | non testé | non testé |
+| W49 | S4, curseur immobile 60 s **une fois les animations terminées** (attendre 2 s après le dernier clic ou mouvement), tous les effets actifs | Part d'un cœur logique sous 1 % (méthode de W7) | non testé | non testé |
+| W50 | Images par écran au repos : relever la ligne « Bilan » (écriture toutes les 10 s), attendre 60 s sans bouger ni cliquer, relever à nouveau | Le nombre d'images par écran n'a pas augmenté (à une ou deux images près pour la fin de l'animation). S'il augmente continuellement, une animation ne s'arrête pas : conserver le fichier de sonde | non testé | non testé |
+| W51 | Ligne « Bilan » : clics et sons | Faire exactement 10 clics gauche et 4 clics droits à vitesse normale : « clics gauche 10, clics droit 4, sons joués 14 ». Couper le son (Ctrl + Alt + Maj + S), refaire 3 clics : les clics augmentent, les sons joués non | non testé | non testé |
+| W52 | macOS : premier lancement sur un compte neuf | Aucune invite de permission (notamment « Surveillance de l'entrée ») pour la détection des clics ni pour le son ; les clics gauche et droit sont détectés ; avec « bouton principal » permuté dans les réglages de la souris, noter quel bouton est vu comme gauche | sans objet | non testé |
+
+### Vérifications automatiques
+
+- [x] Format, lint (`-D warnings`), 47 tests, frontière système et compilation release réussissent sous Linux. Le lint réussit aussi avec `--target x86_64-pc-windows-msvc` et `--target aarch64-apple-darwin` (vérification croisée, qui ne remplace pas la recette).
+- [x] Un essai graphique (`rendu::essai_gpu`) crée les quatre pipelines, dessine tous les effets dans une seule passe hors écran sur le pilote logiciel Vulkan de Linux, vérifie la présence de l'anneau, de l'ondulation et de la traînée puis leur disparition, et que plus aucune animation n'est en cours. Il est ignoré, avec un message, sur une machine sans adaptateur graphique. Il ne mesure rien et ne remplace ni W37 ni W48.
+- [ ] La CI est verte sur Windows et sur macOS.
+
+### Cases à cocher (feat/effets-clic)
+
+- [ ] W37 : cumul des effets (Windows, macOS)
+- [ ] W38 : anneau (Windows, macOS)
+- [ ] W39 : traînée (Windows, macOS)
+- [ ] W40 : ondulation gauche et droite distinctes (Windows, macOS)
+- [ ] W41 : clic maintenu (Windows, macOS)
+- [ ] W42 : clics rapides répétés (Windows, macOS)
+- [ ] W43 : boutons permutés (Windows)
+- [ ] W44 : clics très brefs manqués, proportion notée (Windows, macOS)
+- [ ] W45 : désactivation effet par effet (Windows, macOS)
+- [ ] W46 : son, volume, choix, latence (Windows, macOS)
+- [ ] W47 : plusieurs écrans (Windows, macOS)
+- [ ] W48 : S3 en mouvement continu, tous effets actifs (Windows, macOS)
+- [ ] W49 : S4 au repos 60 s après les animations (Windows, macOS)
+- [ ] W50 : images par écran au repos dans le bilan (Windows, macOS)
+- [ ] W51 : clics et sons dans le bilan (Windows, macOS)
+- [ ] W52 : macOS, aucune invite de permission (macOS)
