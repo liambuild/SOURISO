@@ -25,6 +25,11 @@ impl Activations {
         !self.coupes.contains(nom)
     }
 
+    /// Réactive tous les effets coupés.
+    pub fn tout_activer(&mut self) {
+        self.coupes.clear();
+    }
+
     /// Active l'effet s'il était coupé, le coupe sinon. Renvoie le nouvel état.
     pub fn basculer(&mut self, nom: &'static str) -> bool {
         if !self.coupes.remove(nom) {
@@ -51,6 +56,15 @@ mod tests {
         assert!(!a.est_actif(PROJECTEUR));
         assert!(a.basculer(PROJECTEUR));
         assert!(a.est_actif(PROJECTEUR));
+    }
+
+    #[test]
+    fn tout_activer_rend_tous_les_effets_coupes() {
+        let mut a = Activations::default();
+        a.basculer(PROJECTEUR);
+        a.basculer(SON);
+        a.tout_activer();
+        assert!(a.est_actif(PROJECTEUR) && a.est_actif(SON));
     }
 
     #[test]

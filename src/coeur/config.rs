@@ -1,11 +1,14 @@
 //! Configuration unique de l'application : tous les paramètres des effets et des raccourcis.
-//! Pas encore d'interface de réglage : les valeurs par défaut s'appliquent. Les distances sont en
+//! Les paramètres des effets (`Effets`) viennent du profil actif (`profil.rs`) ; les raccourcis
+//! qui activent ou coupent chaque effet sont communs à tous les profils. Les distances sont en
 //! pixels logiques, les durées en secondes, les opacités de 0 (invisible) à 1 (opaque).
+
+use serde::{Deserialize, Serialize};
 
 use super::son::Son;
 
 /// Combinaison de touches globale : modificateurs et une lettre.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Raccourci {
     pub ctrl: bool,
     pub alt: bool,
@@ -15,7 +18,8 @@ pub struct Raccourci {
 }
 
 /// Voile qui assombrit l'écran, avec une zone éclairée autour du curseur.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Projecteur {
     /// Rayon de la zone entièrement éclairée.
     pub rayon: f32,
@@ -25,6 +29,17 @@ pub struct Projecteur {
     pub intensite: f32,
     /// Couleur RGB du voile, composantes de 0 à 1.
     pub couleur: [f32; 3],
+}
+
+impl Default for Projecteur {
+    fn default() -> Self {
+        Projecteur {
+            rayon: 150.0,
+            adoucissement: 100.0,
+            intensite: 0.6,
+            couleur: [0.0, 0.0, 0.0],
+        }
+    }
 }
 
 impl Projecteur {
@@ -41,7 +56,8 @@ impl Projecteur {
 }
 
 /// Anneau coloré autour du curseur.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Anneau {
     /// Rayon de l'anneau, mesuré au milieu de son trait : sa taille.
     pub rayon: f32,
@@ -50,6 +66,17 @@ pub struct Anneau {
     /// Couleur RGB, composantes de 0 à 1.
     pub couleur: [f32; 3],
     pub opacite: f32,
+}
+
+impl Default for Anneau {
+    fn default() -> Self {
+        Anneau {
+            rayon: 28.0,
+            epaisseur: 4.0,
+            couleur: [1.0, 0.8, 0.1],
+            opacite: 0.9,
+        }
+    }
 }
 
 impl Anneau {
@@ -64,7 +91,8 @@ impl Anneau {
 }
 
 /// Traînée : des disques le long du chemin récent du curseur, qui s'effacent.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Trainee {
     /// Longueur maximale de la traînée derrière le curseur.
     pub longueur: f32,
@@ -75,6 +103,18 @@ pub struct Trainee {
     pub rayon: f32,
     pub couleur: [f32; 3],
     pub opacite: f32,
+}
+
+impl Default for Trainee {
+    fn default() -> Self {
+        Trainee {
+            longueur: 180.0,
+            duree_fondu: 0.45,
+            rayon: 7.0,
+            couleur: [0.3, 0.8, 1.0],
+            opacite: 0.6,
+        }
+    }
 }
 
 impl Trainee {
@@ -91,7 +131,8 @@ impl Trainee {
 
 /// Ondulation au clic : un clic gauche fait un anneau plein sur un léger disque, un clic droit
 /// deux anneaux concentriques, dans une autre couleur.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Ondulation {
     /// Rayon que l'ondulation atteint à la fin.
     pub rayon_max: f32,
@@ -100,6 +141,19 @@ pub struct Ondulation {
     pub couleur_gauche: [f32; 3],
     pub couleur_droit: [f32; 3],
     pub opacite: f32,
+}
+
+impl Default for Ondulation {
+    fn default() -> Self {
+        Ondulation {
+            rayon_max: 70.0,
+            duree: 0.6,
+            epaisseur: 3.0,
+            couleur_gauche: [0.2, 0.55, 1.0],
+            couleur_droit: [1.0, 0.5, 0.15],
+            opacite: 0.85,
+        }
+    }
 }
 
 impl Ondulation {
@@ -116,11 +170,21 @@ impl Ondulation {
 }
 
 /// Son joué à chaque clic, gauche ou droit.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SonClic {
     /// De 0 (muet) à 1 (le plein niveau du fichier).
     pub volume: f32,
     pub choix: Son,
+}
+
+impl Default for SonClic {
+    fn default() -> Self {
+        SonClic {
+            volume: 0.5,
+            choix: Son::Clic,
+        }
+    }
 }
 
 impl SonClic {
@@ -132,13 +196,48 @@ impl SonClic {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Config {
+/// Réglages de tous les effets : ce que contient un profil.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Effets {
     pub projecteur: Projecteur,
     pub anneau: Anneau,
     pub trainee: Trainee,
     pub ondulation: Ondulation,
     pub son: SonClic,
+}
+
+impl Effets {
+    /// Ramène chaque réglage dans ses bornes.
+    pub fn borne(&self) -> Effets {
+        Effets {
+            projecteur: self.projecteur.borne(),
+            anneau: self.anneau.borne(),
+            trainee: self.trainee.borne(),
+            ondulation: self.ondulation.borne(),
+            son: self.son.borne(),
+        }
+    }
+}
+
+/// Choix de la carte graphique. Les variables d'environnement `WGPU_ADAPTER_NAME` et
+/// `WGPU_POWER_PREF` l'emportent sur ce réglage (`docs/ARCHITECTURE.md`, 4.2).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Adaptateur {
+    /// Carte qui porte l'écran principal, sinon choix de wgpu.
+    #[default]
+    Automatique,
+    /// Carte la plus économe (en général la carte intégrée).
+    Econome,
+    /// Carte la plus performante (en général la carte dédiée).
+    Performant,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Config {
+    /// Réglages des effets : copie de ceux du profil actif.
+    pub effets: Effets,
     /// Active ou coupe le projecteur.
     pub raccourci_projecteur: Raccourci,
     /// Active ou coupe l'anneau.
@@ -151,8 +250,21 @@ pub struct Config {
     pub raccourci_son: Raccourci,
 }
 
+impl Config {
+    /// Les raccourcis qui activent ou coupent un effet, dans l'ordre des effets activables.
+    pub fn raccourcis_effets(&self) -> [Raccourci; 5] {
+        [
+            self.raccourci_projecteur,
+            self.raccourci_anneau,
+            self.raccourci_trainee,
+            self.raccourci_ondulation,
+            self.raccourci_son,
+        ]
+    }
+}
+
 /// Ctrl + Alt + Maj + une lettre : combinaison à quatre touches, inutilisée par le système.
-const fn raccourci(touche: char) -> Raccourci {
+pub const fn raccourci(touche: char) -> Raccourci {
     Raccourci {
         ctrl: true,
         alt: true,
@@ -164,37 +276,7 @@ const fn raccourci(touche: char) -> Raccourci {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            projecteur: Projecteur {
-                rayon: 150.0,
-                adoucissement: 100.0,
-                intensite: 0.6,
-                couleur: [0.0, 0.0, 0.0],
-            },
-            anneau: Anneau {
-                rayon: 28.0,
-                epaisseur: 4.0,
-                couleur: [1.0, 0.8, 0.1],
-                opacite: 0.9,
-            },
-            trainee: Trainee {
-                longueur: 180.0,
-                duree_fondu: 0.45,
-                rayon: 7.0,
-                couleur: [0.3, 0.8, 1.0],
-                opacite: 0.6,
-            },
-            ondulation: Ondulation {
-                rayon_max: 70.0,
-                duree: 0.6,
-                epaisseur: 3.0,
-                couleur_gauche: [0.2, 0.55, 1.0],
-                couleur_droit: [1.0, 0.5, 0.15],
-                opacite: 0.85,
-            },
-            son: SonClic {
-                volume: 0.5,
-                choix: Son::Clic,
-            },
+            effets: Effets::default(),
             raccourci_projecteur: raccourci('P'),
             raccourci_anneau: raccourci('A'),
             raccourci_trainee: raccourci('T'),
@@ -210,25 +292,13 @@ mod tests {
 
     #[test]
     fn les_valeurs_par_defaut_sont_dans_leurs_bornes() {
-        let c = Config::default();
-        assert_eq!(c.projecteur, c.projecteur.borne());
-        assert_eq!(c.anneau, c.anneau.borne());
-        assert_eq!(c.trainee, c.trainee.borne());
-        assert_eq!(c.ondulation, c.ondulation.borne());
-        assert_eq!(c.son, c.son.borne());
+        let e = Config::default().effets;
+        assert_eq!(e, e.borne());
     }
 
     #[test]
     fn les_raccourcis_par_defaut_sont_distincts() {
-        let c = Config::default();
-        let touches = [
-            c.raccourci_projecteur,
-            c.raccourci_anneau,
-            c.raccourci_trainee,
-            c.raccourci_ondulation,
-            c.raccourci_son,
-        ]
-        .map(|r| r.touche);
+        let touches = Config::default().raccourcis_effets().map(|r| r.touche);
         for (i, a) in touches.iter().enumerate() {
             assert!(!touches[i + 1..].contains(a), "touche {a} en double");
         }
@@ -248,14 +318,14 @@ mod tests {
         let t = Trainee {
             longueur: 0.0,
             duree_fondu: 0.0,
-            ..Config::default().trainee
+            ..Trainee::default()
         }
         .borne();
         assert_eq!((t.longueur, t.duree_fondu), (1.0, 0.05));
         let o = Ondulation {
             duree: 100.0,
             opacite: -1.0,
-            ..Config::default().ondulation
+            ..Ondulation::default()
         }
         .borne();
         assert_eq!((o.duree, o.opacite), (5.0, 0.0));
