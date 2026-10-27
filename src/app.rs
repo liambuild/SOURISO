@@ -102,7 +102,9 @@ impl App {
             fenetres.push(plateforme::creer_surcouche(event_loop, ecran)?);
         }
 
-        let (gpu, premiere) = Gpu::nouveau(event_loop.owned_display_handle(), &fenetres[0])?;
+        let cartes = plateforme::cartes_ecrans(&ecrans);
+        let (gpu, premiere) =
+            Gpu::nouveau(event_loop.owned_display_handle(), &fenetres[0], &cartes)?;
         let mut premiere = Some(premiere);
         for (indice, (ecran, fenetre)) in ecrans.iter().zip(fenetres).enumerate() {
             let surface = match premiere.take() {

@@ -40,6 +40,11 @@ pub fn creer_surcouche(event_loop: &ActiveEventLoop, ecran: &Ecran) -> Result<Wi
         .map_err(|e| e.to_string())
 }
 
+/// Pas d'avis sur la carte qui porte chaque écran : le choix de wgpu s'applique.
+pub fn cartes_ecrans(ecrans: &[Ecran]) -> Vec<Option<String>> {
+    vec![None; ecrans.len()]
+}
+
 /// CoreGraphics renvoie des points (pixels logiques), origine en haut à gauche du bureau.
 /// L'origine de l'écran fournie par winit est en pixels physiques.
 pub fn position_curseur(ecran: &Ecran) -> Option<Point> {

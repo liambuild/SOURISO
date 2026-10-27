@@ -30,6 +30,11 @@ pub fn creer_surcouche(event_loop: &ActiveEventLoop, ecran: &Ecran) -> Result<Wi
         .map_err(|e| e.to_string())
 }
 
+/// Pas d'avis sur la carte qui porte chaque écran : le choix de wgpu s'applique.
+pub fn cartes_ecrans(ecrans: &[Ecran]) -> Vec<Option<String>> {
+    vec![None; ecrans.len()]
+}
+
 /// Rejoue une position fixe au centre de l'écran.
 pub fn position_curseur(ecran: &Ecran) -> Option<Point> {
     Some(Point {

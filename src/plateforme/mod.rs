@@ -107,6 +107,12 @@ pub fn options_instance(
     wgpu::InstanceDescriptor::new_with_display_handle(Box::new(affichage))
 }
 
+/// Nom de la carte graphique qui porte chaque écran, dans l'ordre de `ecrans`. `None` pour un
+/// écran dont le système ne donne pas la carte ; macOS et l'adaptateur factice n'en donnent aucune.
+pub fn cartes_ecrans(ecrans: &[Ecran]) -> Vec<Option<String>> {
+    systeme::cartes_ecrans(ecrans)
+}
+
 /// Position du curseur sur l'écran donné, en pixels logiques (conversion faite ici).
 pub fn position_curseur(ecran: &Ecran) -> Option<Point> {
     systeme::position_curseur(ecran)
