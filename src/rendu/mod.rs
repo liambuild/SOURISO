@@ -2,15 +2,25 @@
 //! Un seul périphérique graphique sert toutes les surcouches ; chaque écran a sa surface et ses
 //! effets.
 
+mod anneau;
+mod commun;
 mod effet;
+mod ondulation;
 mod projecteur;
+mod trainee;
+
+#[cfg(test)]
+mod essai_gpu;
 
 use std::sync::Arc;
+
+use std::time::Instant;
 
 use winit::event_loop::OwnedDisplayHandle;
 use winit::window::Window;
 
 use crate::coeur::activation::Activations;
+use crate::coeur::clic::Bouton;
 use crate::coeur::{Config, Ecran, Point};
 use effet::{creer_effets, Contexte, Effet, Sortie};
 
@@ -332,7 +342,25 @@ impl Rendu {
         self.surface.configure(&self.device, &self.config);
     }
 
-    /// Dessine les effets actifs. Sans effet actif, l'image reste transparente.
+    /// Transmet un clic aux effets actifs de cet écran.
+    pub fn clic(&mut self, bouton: Bouton, position: Point, activations: &Activations) {
+        let maintenant = Instant::now();
+        for effet in &mut self.effets {
+            if activations.est_actif(effet.nom()) {
+                effet.clic(bouton, position, maintenant);
+            }
+        }
+    }
+
+    /// Vrai si un effet actif a encore une animation à produire.
+    pub fn animation_en_cours(&self, activations: &Activations) -> bool {
+        self.effets
+            .iter()
+            .any(|e| activations.est_actif(e.nom()) && e.animation_en_cours())
+    }
+
+    /// Dessine les effets actifs, tous dans la même passe et la même présentation. Sans effet
+    /// actif, l'image reste transparente.
     /// `lire_curseur` donne la position sur cet écran, ou `None` s'il est ailleurs. Elle est
     /// appelée une fois l'image acquise, car l'acquisition peut attendre le rafraîchissement de
     /// l'écran : la position dessinée est ainsi la plus récente possible.
@@ -363,6 +391,8 @@ impl Rendu {
         let contexte = Contexte {
             curseur: lire_curseur(),
             echelle: ecran.echelle as f32,
+            taille: (self.config.width as f32, self.config.height as f32),
+            maintenant: Instant::now(),
         };
         for effet in &mut self.effets {
             if activations.est_actif(effet.nom()) {

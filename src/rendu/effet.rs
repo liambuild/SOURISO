@@ -1,9 +1,15 @@
 //! Interface commune des effets. Ajouter un effet = écrire un fichier qui implémente `Effet` et
 //! le déclarer dans `creer_effets` : ni la boucle, ni la surcouche, ni la plateforme ne changent.
 
+use std::time::Instant;
+
+use crate::coeur::clic::Bouton;
 use crate::coeur::{Config, Point};
 
+use super::anneau::Anneau;
+use super::ondulation::Ondulation;
 use super::projecteur::Projecteur;
+use super::trainee::Trainee;
 
 /// Ce que le rendu sait au moment de dessiner une image d'un écran.
 pub struct Contexte {
@@ -11,6 +17,10 @@ pub struct Contexte {
     pub curseur: Option<Point>,
     /// Pixels physiques par pixel logique de cet écran.
     pub echelle: f32,
+    /// Taille de la surface en pixels physiques.
+    pub taille: (f32, f32),
+    /// Instant de l'image : tous les effets d'un écran partagent la même horloge.
+    pub maintenant: Instant,
 }
 
 /// Format de la surface : les effets construisent leur pipeline pour elle.
@@ -38,17 +48,28 @@ pub trait Effet {
 
     /// Enregistre les commandes de dessin dans la passe, déjà vidée en transparent.
     fn dessiner(&self, passe: &mut wgpu::RenderPass<'_>);
+
+    /// Un clic vient d'avoir lieu à `position` (pixels logiques de cet écran). Appelé même si
+    /// l'image ne peut pas être dessinée tout de suite : le clic ne se perd pas.
+    fn clic(&mut self, _bouton: Bouton, _position: Point, _maintenant: Instant) {}
+
+    /// Vrai tant que l'effet a une animation à faire avancer ou à effacer : le rendu produit des
+    /// images jusque-là, puis s'arrête. Un effet sans animation garde la valeur par défaut.
+    fn animation_en_cours(&self) -> bool {
+        false
+    }
 }
 
-/// Les effets d'un écran, dans l'ordre de superposition.
+/// Les effets d'un écran, dans l'ordre de superposition (le voile en dessous).
 pub fn creer_effets(
     device: &wgpu::Device,
     sortie: &Sortie,
     config: &Config,
 ) -> Vec<Box<dyn Effet>> {
-    vec![Box::new(Projecteur::nouveau(
-        device,
-        sortie,
-        config.projecteur,
-    ))]
+    vec![
+        Box::new(Projecteur::nouveau(device, sortie, config.projecteur)),
+        Box::new(Trainee::nouveau(device, sortie, config.trainee)),
+        Box::new(Anneau::nouveau(device, sortie, config.anneau)),
+        Box::new(Ondulation::nouveau(device, sortie, config.ondulation)),
+    ]
 }
