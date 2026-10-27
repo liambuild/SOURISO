@@ -1,13 +1,20 @@
 //! Adaptateur macOS. Lecture du curseur par CoreGraphics : aucune permission requise.
 
-use core_graphics::event::CGEvent;
+use std::cell::RefCell;
+
+use core_graphics::event::{CGEvent, CGMouseButton};
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+use objc2::rc::Retained;
+use objc2::AnyThread;
+use objc2_app_kit::NSSound;
+use objc2_foundation::NSData;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::platform::macos::{
     ActivationPolicy, EventLoopBuilderExtMacOS, WindowAttributesExtMacOS,
 };
 use winit::window::{Window, WindowAttributes, WindowLevel};
 
+use crate::coeur::clic::Boutons;
 use crate::coeur::{Ecran, Point};
 
 /// Pas d'icône dans le Dock ni de menu d'application : seule l'icône de la barre de menus reste.
@@ -55,6 +62,56 @@ pub fn position_curseur(ecran: &Ecran) -> Option<Point> {
     Some(Point {
         x: (p.x - ecran.origine.0 as f64 / e) as f32,
         y: (p.y - ecran.origine.1 as f64 / e) as f32,
+    })
+}
+
+#[link(name = "CoreGraphics", kind = "framework")]
+extern "C" {
+    /// Vrai si le bouton est enfoncé dans l'état demandé. Interrogation de l'état : aucun
+    /// moniteur d'événements, donc en principe aucune permission « Surveillance de l'entrée ».
+    fn CGEventSourceButtonState(state_id: CGEventSourceStateID, button: CGMouseButton) -> bool;
+}
+
+/// Lecture de l'état de la session. Non testé sur macOS : la permutation des boutons (réglage du
+/// bouton principal) et l'absence d'invite de permission restent à vérifier en recette.
+pub fn boutons() -> Option<Boutons> {
+    // SAFETY : fonction CoreGraphics sans pointeur, appelée avec deux constantes valides.
+    let (gauche, droit) = unsafe {
+        (
+            CGEventSourceButtonState(
+                CGEventSourceStateID::CombinedSessionState,
+                CGMouseButton::Left,
+            ),
+            CGEventSourceButtonState(
+                CGEventSourceStateID::CombinedSessionState,
+                CGMouseButton::Right,
+            ),
+        )
+    };
+    Some(Boutons { gauche, droit })
+}
+
+thread_local! {
+    /// Son en cours : `NSSound` s'arrête quand il est libéré, il faut donc le garder jusqu'au
+    /// suivant (qui coupe le précédent). La boucle d'événements est sur le fil principal.
+    static EN_COURS: RefCell<Option<Retained<NSSound>>> = const { RefCell::new(None) };
+}
+
+/// `NSSound` initialisé depuis la mémoire, joué en asynchrone. Les octets sont copiés par
+/// `NSData`, au prix d'une copie de quelques dizaines de kilo-octets par clic.
+pub fn jouer_son(wav: &'static [u8]) -> bool {
+    let donnees = NSData::with_bytes(wav);
+    let Some(son) = NSSound::initWithData(NSSound::alloc(), &donnees) else {
+        return false;
+    };
+    EN_COURS.with(|en_cours| {
+        let mut en_cours = en_cours.borrow_mut();
+        if let Some(precedent) = en_cours.take() {
+            precedent.stop();
+        }
+        let lance = son.play();
+        *en_cours = Some(son);
+        lance
     })
 }
 

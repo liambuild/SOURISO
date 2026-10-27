@@ -99,6 +99,12 @@ pub struct Compteurs {
     pub echecs_acquisition: u64,
     /// Reconfigurations de la surface, sur surface périmée ou perdue.
     pub reconfigurations: u64,
+    /// Fronts d'appui détectés sur le bouton gauche (un clic maintenu n'en compte qu'un).
+    pub clics_gauche: u64,
+    /// Fronts d'appui détectés sur le bouton droit.
+    pub clics_droit: u64,
+    /// Sons dont la lecture a été acceptée par le système.
+    pub sons_joues: u64,
 }
 
 /// Taux de rafraîchissement d'un écran pour la sonde, ou « inconnu » si le système ne le donne pas.
@@ -134,12 +140,16 @@ pub fn bilan(
         "Bilan : durée d'exécution {secondes:.3} s, temps processeur {processeur}, \
          images dessinées {images} ({par_seconde:.2} images/s en moyenne), \
          images par écran {:?}, réveils de la boucle {}, lectures du curseur {}, \
-         échecs d'acquisition {}, reconfigurations de surface {}",
+         échecs d'acquisition {}, reconfigurations de surface {}, \
+         clics gauche {}, clics droit {}, sons joués {}",
         compteurs.images_par_ecran,
         compteurs.reveils,
         compteurs.lectures_curseur,
         compteurs.echecs_acquisition,
-        compteurs.reconfigurations
+        compteurs.reconfigurations,
+        compteurs.clics_gauche,
+        compteurs.clics_droit,
+        compteurs.sons_joues
     )
 }
 
@@ -155,6 +165,9 @@ mod tests {
             images_par_ecran: vec![800, 400, 0],
             echecs_acquisition: 3,
             reconfigurations: 1,
+            clics_gauche: 12,
+            clics_droit: 3,
+            sons_joues: 15,
         };
         let ligne = bilan(
             Duration::from_secs(60),
@@ -170,7 +183,8 @@ mod tests {
              (noyau 0.500 s, utilisateur 1.000 s), images dessinées 1200 \
              (20.00 images/s en moyenne), images par écran [800, 400, 0], \
              réveils de la boucle 7500, lectures du curseur 22500, \
-             échecs d'acquisition 3, reconfigurations de surface 1"
+             échecs d'acquisition 3, reconfigurations de surface 1, \
+             clics gauche 12, clics droit 3, sons joués 15"
         );
     }
 

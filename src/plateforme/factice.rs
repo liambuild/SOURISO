@@ -4,6 +4,7 @@
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowAttributes, WindowLevel};
 
+use crate::coeur::clic::Boutons;
 use crate::coeur::{Ecran, Point};
 
 pub fn creer_boucle() -> Result<EventLoop<()>, String> {
@@ -41,6 +42,16 @@ pub fn position_curseur(ecran: &Ecran) -> Option<Point> {
         x: ecran.taille.0 as f32 / ecran.echelle as f32 / 2.0,
         y: ecran.taille.1 as f32 / ecran.echelle as f32 / 2.0,
     })
+}
+
+/// Aucun bouton enfoncé : le factice ne rejoue pas de clic.
+pub fn boutons() -> Option<Boutons> {
+    Some(Boutons::default())
+}
+
+/// Ne joue rien et le dit.
+pub fn jouer_son(_wav: &'static [u8]) -> bool {
+    false
 }
 
 pub use super::rusage::temps_processeur;

@@ -8,13 +8,16 @@ use windows_sys::Win32::Graphics::Gdi::{
     DISPLAY_DEVICE_ATTACHED_TO_DESKTOP, DISPLAY_DEVICE_MIRRORING_DRIVER, DM_POSITION,
     ENUM_CURRENT_SETTINGS,
 };
+use windows_sys::Win32::Media::Audio::{PlaySoundW, SND_ASYNC, SND_MEMORY, SND_NODEFAULT};
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
-use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
+use windows_sys::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetSystemMetrics, SM_SWAPBUTTON};
 use winit::event_loop::{ActiveEventLoop, EventLoop, OwnedDisplayHandle};
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{Window, WindowAttributes, WindowLevel};
 
 use super::TempsProcesseur;
+use crate::coeur::clic::Boutons;
 use crate::coeur::{Ecran, Point};
 
 pub fn creer_boucle() -> Result<EventLoop<()>, String> {
@@ -118,6 +121,44 @@ pub fn position_curseur(ecran: &Ecran) -> Option<Point> {
         x: (p.x - ecran.origine.0) as f32 / e,
         y: (p.y - ecran.origine.1) as f32 / e,
     })
+}
+
+/// `GetAsyncKeyState` lit les boutons physiques : `VK_LBUTTON` est le bouton physique de gauche,
+/// même quand l'utilisateur a permuté les boutons. Avec `SM_SWAPBUTTON`, le bouton physique de
+/// gauche fait le clic droit logique ; on rétablit ici le sens que l'utilisateur voit à l'écran.
+pub fn boutons() -> Option<Boutons> {
+    // SAFETY : appels sans pointeur ni état partagé.
+    let (physique_gauche, physique_droit, permutes) = unsafe {
+        (
+            GetAsyncKeyState(i32::from(VK_LBUTTON)),
+            GetAsyncKeyState(i32::from(VK_RBUTTON)),
+            GetSystemMetrics(SM_SWAPBUTTON) != 0,
+        )
+    };
+    // Le bit de poids fort (valeur négative) indique le bouton enfoncé.
+    let (gauche, droit) = (physique_gauche < 0, physique_droit < 0);
+    Some(if permutes {
+        Boutons {
+            gauche: droit,
+            droit: gauche,
+        }
+    } else {
+        Boutons { gauche, droit }
+    })
+}
+
+/// `PlaySoundW` depuis la mémoire, en asynchrone : le fil de la boucle n'attend pas la fin du
+/// son, et un nouveau son coupe le précédent. `SND_NODEFAULT` évite le bip système en cas d'échec.
+pub fn jouer_son(wav: &'static [u8]) -> bool {
+    // SAFETY : avec `SND_MEMORY`, le premier argument pointe sur le fichier WAV en mémoire ; il
+    // est `'static`, donc valide pendant toute la lecture asynchrone.
+    unsafe {
+        PlaySoundW(
+            wav.as_ptr().cast(),
+            std::ptr::null_mut(),
+            SND_MEMORY | SND_ASYNC | SND_NODEFAULT,
+        ) != 0
+    }
 }
 
 /// Temps noyau et utilisateur du processus, séparés. `FILETIME` compte des intervalles de 100 ns.

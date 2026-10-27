@@ -1,6 +1,7 @@
 //! Couche plateforme : seul endroit qui connaît le système.
 //! Le contrat est : boucle d'événements, écrans, surcouche passe-clics, position du curseur,
-//! icône de barre de menus ou de zone de notification, raccourci global, temps processeur.
+//! icône de barre de menus ou de zone de notification, raccourcis globaux, état des boutons de la
+//! souris, lecture d'un son, temps processeur.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -8,6 +9,7 @@ use std::time::Duration;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::Window;
 
+use crate::coeur::clic::Boutons;
 use crate::coeur::{Ecran, Point, Raccourci};
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
@@ -118,6 +120,19 @@ pub fn position_curseur(ecran: &Ecran) -> Option<Point> {
     systeme::position_curseur(ecran)
 }
 
+/// État des boutons de la souris, tel que l'utilisateur le voit : si le système permute les
+/// boutons, la conversion est faite ici. `None` si le système ne répond pas.
+pub fn boutons() -> Option<Boutons> {
+    systeme::boutons()
+}
+
+/// Lance la lecture d'un fichier WAV en mémoire, sans attendre sa fin. Un son en cours peut être
+/// coupé par le suivant. Renvoie faux si le système a refusé. Les octets restent valides pendant
+/// toute la lecture, d'où `'static`.
+pub fn jouer_son(wav: &'static [u8]) -> bool {
+    systeme::jouer_son(wav)
+}
+
 /// Crée l'icône de barre de menus ou de zone de notification, avec une entrée « Quitter ».
 pub fn creer_icone() -> Result<Icone, String> {
     Icone::creer()
@@ -141,7 +156,8 @@ pub fn temps_processeur() -> Option<TempsProcesseur> {
     systeme::temps_processeur()
 }
 
-/// Enregistre le raccourci global. Échoue si le système le refuse (combinaison déjà prise).
-pub fn creer_raccourci(raccourci: &Raccourci) -> Result<RaccourciGlobal, String> {
-    RaccourciGlobal::creer(raccourci)
+/// Enregistre les raccourcis globaux. Un raccourci que le système refuse (combinaison déjà prise)
+/// est signalé par `RaccourciGlobal::refus` et n'empêche pas les autres.
+pub fn creer_raccourcis(raccourcis: &[Raccourci]) -> Result<RaccourciGlobal, String> {
+    RaccourciGlobal::creer(raccourcis)
 }

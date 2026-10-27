@@ -2,14 +2,17 @@
 
 use crate::coeur::Raccourci;
 
-pub struct RaccourciGlobal;
+pub struct RaccourciGlobal {
+    /// Toujours vide : aucun raccourci n'est refusé, aucun n'est enregistré.
+    pub refus: Vec<(usize, String)>,
+}
 
 impl RaccourciGlobal {
-    pub fn creer(_raccourci: &Raccourci) -> Result<Self, String> {
-        Ok(RaccourciGlobal)
+    pub fn creer(_raccourcis: &[Raccourci]) -> Result<Self, String> {
+        Ok(RaccourciGlobal { refus: Vec::new() })
     }
 
-    pub fn activation_demandee(&self) -> bool {
-        false
+    pub fn activations_demandees(&self) -> Vec<usize> {
+        Vec::new()
     }
 }
