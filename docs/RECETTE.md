@@ -94,7 +94,7 @@ Effet projecteur : un voile par écran, zone éclairée aux bords adoucis autour
 
 **État au moment de la livraison** : la CI et la vérification croisée depuis Linux valident la compilation, les tests du cœur et la validité du shader. Rien de ce qui suit n'a été exécuté sur Windows ni sur macOS par l'assistant : tout est « non testé », y compris tout chiffre de processeur.
 
-**Lire le bilan de fermeture.** À la fermeture par l'icône (« Quitter »), `souriso-sonde.txt` reçoit une ligne `Bilan : durée d'exécution … s, temps processeur … s, images dessinées … (… images/s en moyenne)`. Elle n'est pas écrite si le processus est tué.
+**Lire le bilan de fermeture.** À la fermeture par l'icône (« Quitter »), `souriso-sonde.txt` reçoit une ligne `Bilan : durée d'exécution … s, temps processeur … s, images dessinées … (… images/s en moyenne)`. Depuis `fix/performance-projecteur`, elle est aussi réécrite toutes les 10 secondes (voir plus bas) : un processus tué garde le dernier bilan.
 Part d'un cœur logique (%) = temps processeur ÷ durée d'exécution × 100 : 3 s de processeur sur 60 s donnent 5 %. La durée inclut le lancement : pour S3, bouger la souris en continu 60 s juste après le lancement puis quitter ; pour S4, laisser le curseur immobile 60 s puis quitter.
 Cadence : le chiffre d'images par seconde est une moyenne sur toute l'exécution, repos compris (aucune image n'est dessinée à l'arrêt) ; une moyenne basse n'est donc pas un défaut en soi.
 
@@ -140,3 +140,54 @@ Cadence : le chiffre d'images par seconde est une moyenne sur toute l'exécution
 - [ ] W21 : ligne « Bilan » cohérente après « Quitter » (Windows, macOS)
 - [ ] W22 : voile coupé, aucune image dessinée au repos (Windows, macOS)
 
+## fix/performance-projecteur
+
+Réduction du coût processeur du projecteur (S3 : < 3 % d'un cœur logique). Rien ne change à l'écran : voile, trou lumineux, bords adoucis et suivi du curseur sont identiques. Ni la traversée des clics, ni la présentation par composition DX12, ni la frontière système ne sont touchées.
+
+**Point de départ, relevé par le propriétaire sur Windows** (Quadro P620, DX12 en composition, 3 écrans, projecteur actif, curseur en mouvement continu 60 s) : 10,9 % d'un cœur logique. Une exécution mixte de 198,803 s a donné 9,219 s de processeur et 6612 images, soit 33,26 images/s et environ 1,4 ms de processeur par image (démarrage et repos compris : ordre de grandeur, pas une mesure propre).
+
+**Ce qui change**
+
+- **Sonde (A).** Le bilan sépare le temps noyau et le temps utilisateur, et ajoute : images par écran, réveils de la boucle, lectures du curseur, échecs d'acquisition d'image, reconfigurations de la surface. Il est écrit dans `souriso-sonde.txt` toutes les 10 s, en remplaçant la dernière ligne : une fermeture brutale ne le perd pas. Une ligne écrite entre deux bilans (« Projecteur activé ») passe devant lui.
+- **Échec d'acquisition (B).** Sur `Timeout` ou `Occluded`, l'image est sautée et réessayée au passage suivant, sans reconfigurer la surface. Seuls `Outdated`, `Lost` et `Validation` la reconfigurent.
+- **Position du curseur (C).** Elle est relue après l'acquisition de l'image, juste avant le dessin, et non plus lors du réveil précédent.
+- **Reporté** : sondage réduit au repos (D), plafond à 60 images/s (E, les taux de rafraîchissement n'ont pas été communiqués), événements souris bruts (F).
+
+**Méthode de calcul** (à appliquer aux deux scénarios, un écran de chaque taux noté au préalable)
+
+1. Part d'un cœur logique (%) = temps processeur ÷ durée × 100, sur une fenêtre de 60 s hors démarrage : relever `(Get-Process souriso).CPU` (secondes de processeur, noyau et utilisateur) à l'instant t0 puis à t0 + 60 s, dans PowerShell ; part = (CPU(t0 + 60) − CPU(t0)) ÷ 60 × 100. Le résultat ne dépend pas du nombre de cœurs.
+2. Recoupement avec le bilan : à « Quitter » (ou en lisant le dernier bilan écrit), part = temps processeur ÷ durée d'exécution × 100. La durée inclut le démarrage : c'est un contrôle, pas la valeur de référence.
+3. Coût par image (ms) = temps processeur (s) ÷ images dessinées × 1000. Part du noyau (%) = temps noyau ÷ temps processeur × 100.
+4. Réveils par seconde = réveils ÷ durée ; lectures du curseur par seconde = lectures ÷ durée.
+5. Pour une fenêtre propre avec le bilan seul : noter la ligne du bilan à t0 (fichier lu pendant l'exécution, à ± 10 s) et celle de t0 + 60 s, puis soustraire les compteurs et les temps.
+
+| # | Scénario (Windows) | Attendu | Windows |
+|---|---|---|---|
+| W23 | Usage actif, 60 s : 3 écrans, projecteur actif, curseur en mouvement continu | Part d'un cœur logique (méthode 1) à noter pour S3 (< 3 %), avec coût par image, part du noyau, images par écran, échecs d'acquisition et reconfigurations. Comparer au point de départ de 10,9 % | non testé |
+| W24 | Repos, 60 s : mêmes réglages, curseur immobile | Part d'un cœur logique à noter pour S4 (< 1 %), avec réveils et lectures du curseur par seconde. Aucune image dessinée (cf. W22) | non testé |
+| W25 | Échecs d'acquisition | Pendant W23, `échecs d'acquisition` et `reconfigurations de surface` du bilan : noter les valeurs. Une valeur élevée désigne la cause à traiter ensuite | non testé |
+| W26 | Bilan en cours | Pendant l'exécution, `souriso-sonde.txt` contient une seule ligne « Bilan » qui change toutes les 10 s et reste la dernière ligne. Tuer le processus par le Gestionnaire des tâches : le dernier bilan est conservé | non testé |
+| W27 | Apparence inchangée (voile, trou, bords adoucis, suivi du curseur) | Identique à W12 à W14, y compris au franchissement de la jonction. Noter si le trou semble en avance ou en retard sur le curseur matériel | non testé |
+| W28 | Traversée des clics et plein écran | Identique à W19 et W15 | non testé |
+
+Aucun chiffre de ce tableau n'a été relevé : tout est « non testé » jusqu'à ce que le propriétaire le renseigne. Même mesure à refaire sur macOS : non testé.
+
+### Fonctions de la couche plateforme (modifiée)
+
+| Fonction | Windows | macOS |
+|---|---|---|
+| Temps processeur séparé noyau et utilisateur (`GetProcessTimes` / `getrusage`) | non testé | non testé |
+
+### Vérifications automatiques
+
+- [x] Format, lint (`-D warnings`), 13 tests, frontière système et compilation release réussissent sous Linux ; le lint réussit aussi avec `--target x86_64-pc-windows-msvc` et `--target aarch64-apple-darwin` (vérification croisée, qui ne remplace pas W23 à W28).
+- [ ] La CI est verte sur Windows et sur macOS.
+
+### Cases à cocher (fix/performance-projecteur)
+
+- [ ] W23 : usage actif, part d'un cœur logique relevée (Windows)
+- [ ] W24 : repos, part d'un cœur logique relevée (Windows)
+- [ ] W25 : échecs d'acquisition et reconfigurations relevés (Windows)
+- [ ] W26 : bilan en cours, une seule ligne, conservé si le processus est tué (Windows, macOS)
+- [ ] W27 : apparence inchangée (Windows, macOS)
+- [ ] W28 : clics traversants et plein écran inchangés (Windows, macOS)
