@@ -109,8 +109,8 @@ impl App {
                 Some(surface) => Ok(surface),
                 None => gpu.surface(&fenetre),
             };
-            let rendu =
-                surface.and_then(|s| Rendu::nouveau(&gpu, s, &fenetre, indice, &self.config));
+            let rendu = surface
+                .and_then(|s| Rendu::nouveau(&gpu, s, &fenetre, ecran, indice, &self.config));
             match rendu {
                 Ok(rendu) => self.surcouches.push(Surcouche {
                     fenetre,

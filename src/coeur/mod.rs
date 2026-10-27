@@ -20,6 +20,8 @@ pub struct Ecran {
     /// Taille en pixels physiques.
     pub taille: (u32, u32),
     pub echelle: f64,
+    /// Taux de rafraîchissement en millihertz, tel que le système le rapporte.
+    pub rafraichissement_mhz: Option<u32>,
 }
 
 impl Ecran {
@@ -40,6 +42,7 @@ mod tests {
             origine: (1920, 0),
             taille: (3000, 1500),
             echelle: 1.5,
+            rafraichissement_mhz: None,
         };
         assert!(ecran.contient(Point { x: 0.0, y: 0.0 }));
         assert!(ecran.contient(Point {

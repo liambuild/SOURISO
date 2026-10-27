@@ -78,6 +78,7 @@ pub fn ecrans(event_loop: &ActiveEventLoop) -> Result<Vec<Ecran>, String> {
                 origine: (position.x, position.y),
                 taille: (taille.width, taille.height),
                 echelle: moniteur.scale_factor(),
+                rafraichissement_mhz: moniteur.refresh_rate_millihertz(),
             }
         })
         .collect())

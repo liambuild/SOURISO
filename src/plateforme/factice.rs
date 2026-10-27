@@ -50,6 +50,7 @@ mod tests {
             origine: (0, 0),
             taille: (200, 100),
             echelle: 2.0,
+            rafraichissement_mhz: None,
         };
         assert_eq!(position_curseur(&ecran), Some(Point { x: 50.0, y: 25.0 }));
     }
