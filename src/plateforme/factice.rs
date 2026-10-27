@@ -56,6 +56,22 @@ pub fn jouer_son(_wav: &'static [u8]) -> bool {
 
 pub use super::rusage::temps_processeur;
 
+/// Hors Windows et macOS : `$XDG_DATA_HOME/SOURISO`, sinon `~/.local/share/SOURISO`. Sert aux essais.
+pub fn dossier_donnees() -> Option<std::path::PathBuf> {
+    let base = std::env::var_os("XDG_DATA_HOME")
+        .filter(|d| !d.is_empty())
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            let maison = std::env::var_os("HOME").filter(|d| !d.is_empty())?;
+            Some(
+                std::path::PathBuf::from(maison)
+                    .join(".local")
+                    .join("share"),
+            )
+        })?;
+    Some(base.join("SOURISO"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

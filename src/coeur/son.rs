@@ -1,10 +1,11 @@
 //! Sons de clic : les trois sons embarqués et leur mise au volume. Les fichiers sont produits par
 //! `examples/generer_sons.rs` ; origine et licence dans `docs/SONS.md`.
 
-/// Son joué au clic, au choix. Sans interface de réglage, seule la valeur de `Config` en choisit
-/// un : les variantes que la configuration par défaut n'emploie pas restent disponibles.
-#[allow(dead_code)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+/// Son joué au clic, au choix du profil.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Son {
     /// Tic sec.
     Clic,

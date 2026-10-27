@@ -8,7 +8,7 @@ use bytemuck::{Pod, Zeroable};
 
 use crate::coeur::activation::ONDULATION;
 use crate::coeur::clic::Bouton;
-use crate::coeur::config;
+use crate::coeur::config::{self, Effets};
 use crate::coeur::ondulation::{Ondulations, MAX};
 use crate::coeur::Point;
 
@@ -63,6 +63,10 @@ impl Ondulation {
 impl Effet for Ondulation {
     fn nom(&self) -> &'static str {
         ONDULATION
+    }
+
+    fn appliquer(&mut self, effets: &Effets) {
+        self.reglages = effets.ondulation.borne();
     }
 
     fn clic(&mut self, bouton: Bouton, position: Point, maintenant: Instant) {

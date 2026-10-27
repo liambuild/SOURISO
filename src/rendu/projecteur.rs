@@ -4,7 +4,7 @@
 use bytemuck::{Pod, Zeroable};
 
 use crate::coeur::activation::PROJECTEUR;
-use crate::coeur::config;
+use crate::coeur::config::{self, Effets};
 
 use super::effet::{Contexte, Effet, Sortie};
 
@@ -122,6 +122,10 @@ impl Projecteur {
 impl Effet for Projecteur {
     fn nom(&self) -> &'static str {
         PROJECTEUR
+    }
+
+    fn appliquer(&mut self, effets: &Effets) {
+        self.reglages = effets.projecteur.borne();
     }
 
     fn preparer(&mut self, queue: &wgpu::Queue, contexte: &Contexte) {

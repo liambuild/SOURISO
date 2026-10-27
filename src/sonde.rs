@@ -105,6 +105,10 @@ pub struct Compteurs {
     pub clics_droit: u64,
     /// Sons dont la lecture a été acceptée par le système.
     pub sons_joues: u64,
+    /// Nom du profil actif à l'instant du bilan.
+    pub profil_actif: String,
+    /// Changements de profil depuis le lancement (passer au profil déjà actif n'en compte pas).
+    pub changements_profil: u64,
 }
 
 /// Taux de rafraîchissement d'un écran pour la sonde, ou « inconnu » si le système ne le donne pas.
@@ -141,7 +145,8 @@ pub fn bilan(
          images dessinées {images} ({par_seconde:.2} images/s en moyenne), \
          images par écran {:?}, réveils de la boucle {}, lectures du curseur {}, \
          échecs d'acquisition {}, reconfigurations de surface {}, \
-         clics gauche {}, clics droit {}, sons joués {}",
+         clics gauche {}, clics droit {}, sons joués {}, \
+         profil actif « {} », changements de profil {}",
         compteurs.images_par_ecran,
         compteurs.reveils,
         compteurs.lectures_curseur,
@@ -149,7 +154,9 @@ pub fn bilan(
         compteurs.reconfigurations,
         compteurs.clics_gauche,
         compteurs.clics_droit,
-        compteurs.sons_joues
+        compteurs.sons_joues,
+        compteurs.profil_actif,
+        compteurs.changements_profil
     )
 }
 
@@ -168,6 +175,8 @@ mod tests {
             clics_gauche: 12,
             clics_droit: 3,
             sons_joues: 15,
+            profil_actif: "Présentation".into(),
+            changements_profil: 2,
         };
         let ligne = bilan(
             Duration::from_secs(60),
@@ -184,7 +193,8 @@ mod tests {
              (20.00 images/s en moyenne), images par écran [800, 400, 0], \
              réveils de la boucle 7500, lectures du curseur 22500, \
              échecs d'acquisition 3, reconfigurations de surface 1, \
-             clics gauche 12, clics droit 3, sons joués 15"
+             clics gauche 12, clics droit 3, sons joués 15, \
+             profil actif « Présentation », changements de profil 2"
         );
     }
 

@@ -21,6 +21,7 @@ use winit::window::Window;
 
 use crate::coeur::activation::Activations;
 use crate::coeur::clic::Bouton;
+use crate::coeur::config::{Adaptateur, Effets};
 use crate::coeur::{Config, Ecran, Point};
 use effet::{creer_effets, Contexte, Effet, Sortie};
 
@@ -35,11 +36,13 @@ pub struct Gpu {
 impl Gpu {
     /// Choisit l'adaptateur compatible avec la surface de la première fenêtre et la renvoie.
     /// `cartes` donne, par écran (le principal en premier), la carte qui le porte si le système
-    /// la connaît.
+    /// la connaît. `adaptateur` est le réglage de l'utilisateur ; les variables d'environnement
+    /// l'emportent.
     pub fn nouveau(
         affichage: OwnedDisplayHandle,
         premiere: &Arc<Window>,
         cartes: &[Option<String>],
+        adaptateur: Adaptateur,
     ) -> Result<(Self, wgpu::Surface<'static>), String> {
         let instance =
             wgpu::Instance::new(crate::plateforme::options_instance(affichage).with_env());
@@ -82,8 +85,9 @@ impl Gpu {
                 }
             ));
         }
-        // Ordre de priorité : `WGPU_ADAPTER_NAME`, puis `WGPU_POWER_PREF`, puis la carte qui porte
-        // l'écran principal, puis le choix de wgpu.
+        // Ordre de priorité : `WGPU_ADAPTER_NAME`, puis `WGPU_POWER_PREF`, puis le réglage
+        // « économe » ou « performant », puis la carte qui porte l'écran principal, puis le choix
+        // de wgpu.
         let par_nom = std::env::var("WGPU_ADAPTER_NAME")
             .ok()
             .filter(|nom| !nom.is_empty())
@@ -97,11 +101,15 @@ impl Gpu {
                 }
                 indice
             });
-        let preference = wgpu::PowerPreference::from_env();
+        let preference_env = wgpu::PowerPreference::from_env();
+        let preference_reglage = preference_du_reglage(adaptateur);
+        let preference = preference_env.or(preference_reglage);
         let (indice, mut critere) = if let Some(indice) = par_nom {
             (Some(indice), Critere::VariableNom)
-        } else if preference.is_some() {
+        } else if preference_env.is_some() {
             (None, Critere::VariablePreference)
+        } else if preference_reglage.is_some() {
+            (None, Critere::Reglage)
         } else if let Some(indice) = indice_carte_des_ecrans(&candidats, cartes) {
             (Some(indice), Critere::CarteDesEcrans)
         } else {
@@ -182,6 +190,7 @@ struct Candidat {
 enum Critere {
     VariableNom,
     VariablePreference,
+    Reglage,
     CarteDesEcrans,
     ChoixWgpu,
     ChoixWgpuSansProcesseur,
@@ -192,10 +201,21 @@ impl Critere {
         match self {
             Critere::VariableNom => "variable WGPU_ADAPTER_NAME",
             Critere::VariablePreference => "variable WGPU_POWER_PREF",
+            Critere::Reglage => "réglage de l'adaptateur (économe ou performant)",
             Critere::CarteDesEcrans => "carte qui porte les écrans",
             Critere::ChoixWgpu => "choix de wgpu",
             Critere::ChoixWgpuSansProcesseur => "choix de wgpu, pilote logiciel écarté",
         }
+    }
+}
+
+/// Préférence de puissance qui découle du réglage. « Automatique » n'en exprime aucune : la carte
+/// des écrans, puis wgpu, décident.
+fn preference_du_reglage(adaptateur: Adaptateur) -> Option<wgpu::PowerPreference> {
+    match adaptateur {
+        Adaptateur::Automatique => None,
+        Adaptateur::Econome => Some(wgpu::PowerPreference::LowPower),
+        Adaptateur::Performant => Some(wgpu::PowerPreference::HighPerformance),
     }
 }
 
@@ -327,6 +347,14 @@ impl Rendu {
             effets: creer_effets(&gpu.device, &sortie, reglages),
             statistiques: Statistiques::default(),
         })
+    }
+
+    /// Applique les réglages d'un autre profil à tous les effets de cet écran, sans les recréer
+    /// ni toucher à la présentation : la prochaine image les montre.
+    pub fn appliquer(&mut self, effets: &Effets) {
+        for effet in &mut self.effets {
+            effet.appliquer(effets);
+        }
     }
 
     pub fn statistiques(&self) -> Statistiques {
@@ -509,6 +537,19 @@ mod tests {
             true,
         )];
         assert_eq!(indice_hors_processeur(&seul), None);
+    }
+
+    #[test]
+    fn le_reglage_de_l_adaptateur_se_traduit_en_preference_de_puissance() {
+        assert_eq!(preference_du_reglage(Adaptateur::Automatique), None);
+        assert_eq!(
+            preference_du_reglage(Adaptateur::Econome),
+            Some(wgpu::PowerPreference::LowPower)
+        );
+        assert_eq!(
+            preference_du_reglage(Adaptateur::Performant),
+            Some(wgpu::PowerPreference::HighPerformance)
+        );
     }
 
     #[test]

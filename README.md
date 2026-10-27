@@ -10,7 +10,8 @@ SOURISO rend le curseur facile à suivre à l'écran, en direct comme en enregis
 - un anneau ;
 - une traînée ;
 - une ondulation au clic ;
-- un son au clic.
+- un son au clic ;
+- des profils de réglages nommés, chacun avec son raccourci (par défaut, « Présentation » et « Enregistrement » au premier lancement), enregistrés localement dans le dossier de données de l'utilisateur.
 
 ## Périmètre
 

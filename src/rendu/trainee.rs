@@ -6,7 +6,7 @@ use std::time::Duration;
 use bytemuck::{Pod, Zeroable};
 
 use crate::coeur::activation::TRAINEE;
-use crate::coeur::config;
+use crate::coeur::config::{self, Effets};
 use crate::coeur::trainee::{Trainee as Etat, MAX_POINTS};
 
 use super::commun::Passe;
@@ -59,6 +59,10 @@ impl Trainee {
 impl Effet for Trainee {
     fn nom(&self) -> &'static str {
         TRAINEE
+    }
+
+    fn appliquer(&mut self, effets: &Effets) {
+        self.reglages = effets.trainee.borne();
     }
 
     fn preparer(&mut self, queue: &wgpu::Queue, contexte: &Contexte) {

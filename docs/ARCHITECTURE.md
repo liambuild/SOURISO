@@ -177,15 +177,16 @@ Ordre de décision, du plus prioritaire au moins prioritaire. La sonde écrit le
 
 1. `WGPU_ADAPTER_NAME` (fragment du nom, sans casse, parmi les adaptateurs qui peuvent présenter). Critère : « variable WGPU_ADAPTER_NAME ».
 2. `WGPU_POWER_PREF` (`low`, `high`, `none`), transmise à wgpu. Critère : « variable WGPU_POWER_PREF ».
-3. **La carte qui porte l'écran principal**, donnée par la couche plateforme (`plateforme::cartes_ecrans`) et rapprochée d'un adaptateur wgpu par son nom. Elle n'est retenue que si elle peut présenter sur la surface et si ce n'est pas un pilote logiciel. Critère : « carte qui porte les écrans ».
-4. Sinon, le choix de wgpu (`PowerPreference::None`, premier adaptateur compatible avec la surface). Si wgpu tombe sur un pilote logiciel (type processeur, par exemple le « Microsoft Basic Render Driver ») alors qu'un autre adaptateur peut présenter, le premier de ceux-là est retenu. Critère : « choix de wgpu » ou « choix de wgpu, pilote logiciel écarté ».
+3. **Le réglage de l'adaptateur** du fichier des profils (`"adaptateur"` : `automatique`, `econome`, `performant`). « Économe » équivaut à `WGPU_POWER_PREF=low`, « performant » à `high` ; « automatique » ne dit rien et laisse la suite décider. Les variables d'environnement l'emportent toujours. Pris en compte au lancement suivant : le périphérique graphique est choisi une seule fois. Critère : « réglage de l'adaptateur (économe ou performant) ».
+4. **La carte qui porte l'écran principal**, donnée par la couche plateforme (`plateforme::cartes_ecrans`) et rapprochée d'un adaptateur wgpu par son nom. Elle n'est retenue que si elle peut présenter sur la surface et si ce n'est pas un pilote logiciel. Critère : « carte qui porte les écrans ».
+5. Sinon, le choix de wgpu (`PowerPreference::None`, premier adaptateur compatible avec la surface). Si wgpu tombe sur un pilote logiciel (type processeur, par exemple le « Microsoft Basic Render Driver ») alors qu'un autre adaptateur peut présenter, le premier de ceux-là est retenu. Critère : « choix de wgpu » ou « choix de wgpu, pilote logiciel écarté ».
 
-Le pilote logiciel n'est jamais retenu aux étapes 3 et 4 tant qu'une autre carte peut présenter. Un nom donné par `WGPU_ADAPTER_NAME` reste un choix explicite et n'est pas filtré.
+Le pilote logiciel n'est jamais retenu aux étapes 4 et 5 tant qu'une autre carte peut présenter. Un nom donné par `WGPU_ADAPTER_NAME` reste un choix explicite et n'est pas filtré.
 
 **Mécanisme par système.**
 
 - *Windows.* `EnumDisplayDevicesW` liste les sorties actives du bureau avec le nom de la carte qui les porte ; `EnumDisplaySettingsW` donne la position de chaque sortie, rapprochée de l'origine de l'écran (pixels physiques). Deux appels de `user32` via `windows-sys`, sans COM ni DXGI. Le nom de la carte est rapproché de celui de wgpu par égalité ou inclusion, sans casse. Les deux noms viennent de la même description du pilote ; un désaccord de libellé conduit à l'étape 4, jamais à un échec.
-- *macOS.* La couche plateforme ne donne pas d'avis : le comportement est celui de l'étape 4.
+- *macOS.* La couche plateforme ne donne pas d'avis : le comportement est celui de l'étape 5.
 - *Factice (Linux).* Aucun avis.
 
 **Limites.**
@@ -193,10 +194,10 @@ Le pilote logiciel n'est jamais retenu aux étapes 3 et 4 tant qu'une autre cart
 - *Poste fixe.* L'heuristique suit la carte qui porte les écrans, quelle qu'elle soit : sur un poste fixe dont la carte dédiée porte les écrans, c'est la dédiée qui est retenue (et non l'intégrée, même si elle est active et peut présenter). Ce cas n'a pas été mesuré (« non testé », W32).
 - *Écrans répartis entre plusieurs cartes.* Une seule carte rend pour tous les écrans (un seul périphérique, section « Rendu »). On retient celle de l'écran principal ; les écrans portés par l'autre carte paient la recopie. Un adaptateur par écran demanderait un périphérique par carte, hors de cette modification. La sonde donne la carte de chaque écran, ce qui rend le cas visible.
 - *Rapprochement par nom.* Deux cartes de même nom (deux cartes identiques) ne se distinguent pas : la première énumérée est retenue.
-- *Écran dont la carte est inconnue* (sortie virtuelle, bureau à distance, système muet) : si c'est l'écran principal, on retombe sur l'étape 4.
+- *Écran dont la carte est inconnue* (sortie virtuelle, bureau à distance, système muet) : si c'est l'écran principal, on retombe sur l'étape 5.
 - *Observée, non expliquée.* `WGPU_POWER_PREF=low` aurait retenu la Quadro chez le propriétaire (W34).
 
-**À prévoir.** Un réglage de l'adaptateur (automatique, économe, performant) rejoindra la fenêtre de réglages du prompt 5. « Automatique » est le comportement ci-dessus ; les deux autres reprennent `WGPU_POWER_PREF`.
+**Réglage de l'adaptateur.** Il vit dans le fichier des profils (section 9, « Profils ») et sera proposé dans la fenêtre de réglages (branche `feat/reglages`). Il est global, pas par profil : l'adaptateur ne change pas en cours d'exécution.
 
 ## 5. Risques
 
@@ -300,9 +301,27 @@ Tous sont mesurables. Les machines de référence (un Mac à puce Apple et un PC
 - **Raccourcis.** Un raccourci global par effet (Ctrl + Alt + Maj + P projecteur, A anneau, T traînée, O ondulation, S son), un seul gestionnaire pour tous.
 - **Risque pour S3 et S4 : non écarté, non mesuré.** Côté processeur, la conception ne devrait pas dépasser le socle (même cadence d'interrogation, mêmes images). Reste le coût de la composition (DWM) d'une surface plein écran qui n'est plus presque transparente : charge GPU et mémoire par écran, et effet possible sur une vidéo plein écran dessous. Rien de cela n'est mesuré ; voir W7, W8 et W15 dans `docs/RECETTE.md`. Si W7 dépasse 3 % ou 1 %, le repli est à décider avec le propriétaire avant de toucher à la cadence ou à la présentation.
 - **Interface des effets** : `rendu::effet::Effet` (nom, préparation des données GPU, dessin dans la passe) et `creer_effets`, seul endroit où déclarer un effet. L'activation par nom vit dans `coeur::activation`. Ajouter un effet ne touche ni la boucle, ni la plateforme.
-- **Configuration unique** : `coeur::config::Config`, valeurs par défaut sans interface de réglage.
+- **Configuration unique** : `coeur::config::Config` regroupe les réglages des effets (`Effets`, copie de ceux du profil actif) et les raccourcis qui activent ou coupent chaque effet.
 - **Frontière** : le raccourci global (`RegisterHotKey` / Carbon via la crate `global-hotkey`, sans permission ni droit administrateur) et la lecture du temps processeur du processus (`GetProcessTimes` / `getrusage`) vivent dans `src/plateforme`. Défaut : Ctrl + Alt + Maj + P. Un refus du système n'arrête pas l'application, il est écrit dans la sonde.
 - **Limite connue** : les écrans sont détectés au lancement ; brancher ou débrancher un écran, ou changer sa résolution, demande de relancer l'application.
+
+**Profils (branche `feat/profils`).**
+
+- **Contenu.** Un profil = un nom, les réglages de tous les effets (`config::Effets`) et un raccourci qui y fait passer. Le premier de la liste est le profil par défaut : il ne se supprime pas. Au premier lancement, deux profils d'exemple s'ajoutent, « Présentation » (grands repères très visibles) et « Enregistrement » (repères fins et discrets). Les raccourcis par défaut sont Ctrl + Alt + Maj + D (Par défaut), E (Présentation), R (Enregistrement) et N (profil suivant, avec retour au premier après le dernier).
+- **Sens des raccourcis.** Celui d'un profil passe à ce profil et réactive les effets coupés. Celui du profil suivant ne fait que changer de profil. Les raccourcis qui activent ou coupent un effet (P, A, T, O, S) sont communs à tous les profils et inchangés. Une touche maintenue ne déclenche qu'un changement (même délai que pour les effets, 400 ms).
+- **Fichier.** `profils.json`, dans `%APPDATA%\SOURISO` (Windows) ou `~/Library/Application Support/SOURISO` (macOS), choisi par `plateforme::dossier_donnees`. JSON lisible, avec un numéro de version du format (`"version": 1`), le profil actif (dernier utilisé, restauré au démarrage), l'adaptateur graphique, le raccourci du profil suivant et la liste des profils. Écriture dans un fichier voisin puis renommage, pour ne jamais laisser un fichier tronqué. Écrit au premier lancement et à chaque changement de profil. Aucune dépendance au-delà de `serde` et `serde_json`, sans droit particulier ni réseau.
+- **Fichier absent, illisible ou incohérent.** Absent : premier lancement. Mal formé, tronqué, vide, d'une autre version du format : valeurs du premier lancement, et le fichier d'origine est conservé sous `profils.json.corrompu` (un seul, le dernier) avant d'écrire le nouveau. Lisible mais incohérent (valeur hors bornes, noms en double ou vides, raccourci déjà pris dans le fichier, profil actif inexistant, liste vide) : corrigé en mémoire, chaque correction écrite dans la sonde. Un champ absent prend sa valeur par défaut. Dossier introuvable ou non inscriptible : l'application tourne avec les profils en mémoire et le dit dans la sonde. Rien de tout cela n'arrête l'application.
+- **Changement de profil en cours d'utilisation.** Les réglages sont remplacés dans les effets existants (`Effet::appliquer`) : pas de pipeline recréé, pas de présentation supplémentaire, la traînée et les ondulations en cours continuent avec les nouvelles valeurs. Chaque écran est redessiné une fois. Le son est mis au volume du profil et gardé pour la durée de l'exécution (un tampon par couple son et volume rencontré).
+- **Raccourci déjà pris.** Le programme refuse lui-même deux profils (ou un profil et un effet, ou le profil suivant) sur la même combinaison. Un refus du système est écrit dans la sonde avec le nom du profil, les autres raccourcis restent actifs, et l'essai est refait au lancement suivant. Sous Windows, `RegisterHotKey` échoue si un autre processus détient la combinaison. Sous macOS, Carbon ne signale pas de façon fiable une combinaison détenue par une autre application : la détection y est incertaine (« non testé »).
+- **Sonde.** Au lancement : profil actif, son rang, adaptateur demandé, chemin du fichier, et chaque message de chargement. À chaque changement : « profil A → B » avec son origine. Dans le bilan : profil actif et nombre de changements.
+- **Gestion des profils.** Créer, dupliquer (sans raccourci), renommer, supprimer, fixer un raccourci : écrit et testé dans `coeur::profil`, sans interface avant `feat/reglages`.
+
+**Fenêtre de réglages (décidée, branche `feat/reglages`, pas encore écrite).**
+
+- **Second exécutable `souriso-reglages`, en Tauri 2**, lancé à l'ouverture et quitté proprement à la fermeture (arrêt forcé en dernier recours). Le processus principal reste sans moteur web : S4 et S19 tiennent par construction. Pourquoi pas dans le même processus : Tauri apporte sa propre boucle d'événements, qui ne cohabite pas avec celle de winit (sur macOS, les deux voudraient le fil principal).
+- **Vie des deux processus.** Si le processus principal s'arrête, la fenêtre de réglages se ferme d'elle-même. Si la fenêtre plante, le processus principal continue. Échanges par tuyaux locaux (entrée et sortie standard du processus enfant), sans réseau. Les deux exécutables sont livrés dans le même installeur.
+- **Aperçu en direct** : chaque réglage est envoyé au processus principal, qui l'applique aux effets réels (`Effet::appliquer`) autour du curseur. Aucun second rendu, aucune présentation supplémentaire.
+- **WebView2 (Windows).** Rien n'est embarqué ni téléchargé. À l'ouverture des réglages, la couche plateforme détecte le moteur. S'il manque, une boîte native l'indique (avec la marche à suivre dans le README) et l'application continue avec le dernier profil. macOS utilise WKWebView, fourni par le système. Ce cas sera documenté dans le README avec la fenêtre.
 
 **Seuils** : les reformulations de la section 6 (latence en images, unité de mesure du processeur, mesure de la mémoire, définition du démarrage) sont proposées mais **pas encore validées**. Elles sont à valider avant la v1.
 

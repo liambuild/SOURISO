@@ -5,6 +5,7 @@
 use std::time::{Duration, Instant};
 
 use crate::coeur::clic::Bouton;
+use crate::coeur::profil::Profils;
 use crate::coeur::{Config, Point};
 
 use super::effet::{creer_effets, Contexte, Sortie};
@@ -174,4 +175,37 @@ fn les_quatre_effets_se_dessinent_dans_une_meme_passe() {
     // Le projecteur et l'anneau restent ; la tête de la traînée et l'ondulation ont disparu.
     assert_eq!(pixel(&repos, 128, 128)[3], 0, "traînée effacée");
     assert_eq!(pixel(&repos, 128 + 28, 128), sur_anneau);
+}
+
+#[test]
+fn changer_de_profil_change_le_dessin_sans_recreer_les_effets() {
+    let Some(banc) = banc() else {
+        eprintln!("essai ignoré : aucun adaptateur graphique");
+        return;
+    };
+    let sortie = Sortie {
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        non_premultiplie: false,
+    };
+    let mut effets = creer_effets(&banc.device, &sortie, &Config::default());
+    let contexte = Contexte {
+        curseur: Some(Point { x: 128.0, y: 128.0 }),
+        echelle: 1.0,
+        taille: (L as f32, H as f32),
+        maintenant: Instant::now(),
+    };
+    let avant = image(&banc, &mut effets, &contexte);
+    // Profil par défaut : anneau jaune de rayon 28, rien à 46 px du centre.
+    assert!(pixel(&avant, 128 + 28, 128)[0] > 150);
+    let hors_anneau = pixel(&avant, 128 + 46, 128);
+
+    let presentation = Profils::default().profils[1].effets;
+    for e in &mut effets {
+        e.appliquer(&presentation);
+    }
+    let apres = image(&banc, &mut effets, &contexte);
+    // Profil Présentation : anneau rouge de rayon 46, épais de 8.
+    let sur_anneau = pixel(&apres, 128 + 46, 128);
+    assert!(sur_anneau[0] > 200 && sur_anneau[1] < 100, "{sur_anneau:?}");
+    assert_ne!(sur_anneau, hors_anneau);
 }

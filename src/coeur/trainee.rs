@@ -111,7 +111,7 @@ mod tests {
     use crate::coeur::Config;
 
     fn reglages() -> config::Trainee {
-        Config::default().trainee
+        Config::default().effets.trainee
     }
 
     fn pt(x: f32) -> Point {
