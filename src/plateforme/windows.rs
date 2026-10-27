@@ -9,6 +9,7 @@ use winit::event_loop::{ActiveEventLoop, EventLoop, OwnedDisplayHandle};
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{Window, WindowAttributes, WindowLevel};
 
+use super::TempsProcesseur;
 use crate::coeur::{Ecran, Point};
 
 pub fn creer_boucle() -> Result<EventLoop<()>, String> {
@@ -63,8 +64,8 @@ pub fn position_curseur(ecran: &Ecran) -> Option<Point> {
     })
 }
 
-/// Temps noyau et utilisateur du processus. `FILETIME` compte des intervalles de 100 ns.
-pub fn temps_processeur() -> Option<Duration> {
+/// Temps noyau et utilisateur du processus, séparés. `FILETIME` compte des intervalles de 100 ns.
+pub fn temps_processeur() -> Option<TempsProcesseur> {
     let nul = FILETIME {
         dwLowDateTime: 0,
         dwHighDateTime: 0,
@@ -84,8 +85,11 @@ pub fn temps_processeur() -> Option<Duration> {
     if ok == 0 {
         return None;
     }
-    let cent_ns = |t: FILETIME| ((t.dwHighDateTime as u64) << 32) | t.dwLowDateTime as u64;
-    Some(Duration::from_nanos(
-        (cent_ns(noyau) + cent_ns(utilisateur)) * 100,
-    ))
+    let duree = |t: FILETIME| {
+        Duration::from_nanos((((t.dwHighDateTime as u64) << 32) | t.dwLowDateTime as u64) * 100)
+    };
+    Some(TempsProcesseur {
+        noyau: duree(noyau),
+        utilisateur: duree(utilisateur),
+    })
 }

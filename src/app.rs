@@ -13,9 +13,13 @@ use crate::coeur::activation::{Activations, PROJECTEUR};
 use crate::coeur::{Config, Ecran, Point};
 use crate::plateforme::{self, Icone, RaccourciGlobal};
 use crate::rendu::{Gpu, Rendu};
+use crate::sonde::{self, Compteurs};
 
 /// Cadence d'interrogation du curseur (environ 120 Hz). Le dessin n'a lieu que si l'image change.
 const PERIODE: Duration = Duration::from_millis(8);
+
+/// Intervalle entre deux écritures du bilan en cours dans la sonde.
+const PERIODE_BILAN: Duration = Duration::from_secs(10);
 
 /// Délai minimal entre deux bascules : une touche maintenue répète l'événement du raccourci.
 const ANTI_REPETITION: Duration = Duration::from_millis(400);
@@ -28,9 +32,10 @@ struct Surcouche {
     curseur: Option<Point>,
     /// Vrai tant que l'image affichée ne correspond pas à l'état courant.
     a_redessiner: bool,
+    /// Images réellement présentées sur cet écran, pour le bilan de la sonde.
+    images: u64,
 }
 
-#[derive(Default)]
 pub struct App {
     config: Config,
     activations: Activations,
@@ -39,16 +44,57 @@ pub struct App {
     raccourci: Option<RaccourciGlobal>,
     derniere_bascule: Option<Instant>,
     pub echec: Option<String>,
-    /// Images réellement présentées depuis le lancement, pour le bilan de la sonde.
-    pub images: u64,
+    debut: Instant,
+    dernier_bilan: Instant,
+    reveils: u64,
+    lectures_curseur: u64,
 }
 
 /// Position du curseur sur cet écran, ou `None` s'il est sur un autre.
-fn curseur_sur(ecran: &Ecran) -> Option<Point> {
+fn curseur_sur(ecran: &Ecran, lectures: &mut u64) -> Option<Point> {
+    *lectures += 1;
     plateforme::position_curseur(ecran).filter(|p| ecran.contient(*p))
 }
 
 impl App {
+    /// `debut` est l'instant de lancement, point de départ de la durée du bilan.
+    pub fn new(debut: Instant) -> Self {
+        App {
+            config: Config::default(),
+            activations: Activations::default(),
+            surcouches: Vec::new(),
+            icone: None,
+            raccourci: None,
+            derniere_bascule: None,
+            echec: None,
+            debut,
+            dernier_bilan: debut,
+            reveils: 0,
+            lectures_curseur: 0,
+        }
+    }
+
+    /// Ligne de bilan : durée, temps processeur et ce que la boucle a fait depuis le lancement.
+    pub fn bilan(&self) -> String {
+        let statistiques: Vec<_> = self
+            .surcouches
+            .iter()
+            .map(|s| s.rendu.statistiques())
+            .collect();
+        let compteurs = Compteurs {
+            reveils: self.reveils,
+            lectures_curseur: self.lectures_curseur,
+            images_par_ecran: self.surcouches.iter().map(|s| s.images).collect(),
+            echecs_acquisition: statistiques.iter().map(|s| s.echecs_acquisition).sum(),
+            reconfigurations: statistiques.iter().map(|s| s.reconfigurations).sum(),
+        };
+        sonde::bilan(
+            self.debut.elapsed(),
+            plateforme::temps_processeur(),
+            &compteurs,
+        )
+    }
+
     fn demarrer(&mut self, event_loop: &ActiveEventLoop) -> Result<(), String> {
         let ecrans = plateforme::ecrans(event_loop)?;
         let mut fenetres = Vec::new();
@@ -70,8 +116,9 @@ impl App {
                     fenetre,
                     ecran: *ecran,
                     rendu,
-                    curseur: curseur_sur(ecran),
+                    curseur: curseur_sur(ecran, &mut self.lectures_curseur),
                     a_redessiner: true,
+                    images: 0,
                 }),
                 // L'écran principal est indispensable ; un écran supplémentaire qui échoue
                 // reste simplement sans voile.
@@ -88,8 +135,9 @@ impl App {
         }
 
         for s in &mut self.surcouches {
-            if s.rendu.dessiner(&s.ecran, s.curseur, &self.activations) {
-                self.images += 1;
+            let curseur = s.curseur;
+            if s.rendu.dessiner(&s.ecran, || curseur, &self.activations) {
+                s.images += 1;
                 s.a_redessiner = false;
             }
             s.fenetre.set_visible(true);
@@ -139,15 +187,26 @@ impl ApplicationHandler for App {
                 s.a_redessiner = true;
             }
             WindowEvent::RedrawRequested => {
-                let presentee = s.rendu.dessiner(&s.ecran, s.curseur, &self.activations);
+                let lectures = &mut self.lectures_curseur;
+                let curseur = &mut s.curseur;
+                let ecran = &s.ecran;
+                let presentee = s.rendu.dessiner(
+                    ecran,
+                    || {
+                        *curseur = curseur_sur(ecran, lectures);
+                        *curseur
+                    },
+                    &self.activations,
+                );
                 s.a_redessiner = !presentee;
-                self.images += u64::from(presentee);
+                s.images += u64::from(presentee);
             }
             _ => {}
         }
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.reveils += 1;
         if self.icone.as_ref().is_some_and(Icone::quitter_demande) {
             event_loop.exit();
             return;
@@ -159,8 +218,12 @@ impl ApplicationHandler for App {
         {
             self.basculer_projecteur();
         }
+        if self.dernier_bilan.elapsed() >= PERIODE_BILAN {
+            self.dernier_bilan = Instant::now();
+            sonde::bilan_en_cours(&self.bilan());
+        }
         for s in &mut self.surcouches {
-            let position = curseur_sur(&s.ecran);
+            let position = curseur_sur(&s.ecran, &mut self.lectures_curseur);
             if position != s.curseur {
                 s.curseur = position;
                 s.a_redessiner = true;

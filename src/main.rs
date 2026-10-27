@@ -17,13 +17,9 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let mut app = app::App::default();
+    let mut app = app::App::new(debut);
     let resultat = boucle.run_app(&mut app);
-    sonde::ecrire(&sonde::bilan(
-        debut.elapsed(),
-        plateforme::temps_processeur(),
-        app.images,
-    ));
+    sonde::bilan_final(&app.bilan());
     if let Err(e) = resultat {
         sonde::ecrire(&format!("SOURISO : {e}"));
         return ExitCode::from(2);

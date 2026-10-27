@@ -3,6 +3,7 @@
 //! icône de barre de menus ou de zone de notification, raccourci global, temps processeur.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::Window;
@@ -115,8 +116,21 @@ pub fn creer_icone() -> Result<Icone, String> {
     Icone::creer()
 }
 
+/// Temps processeur du processus depuis son lancement, noyau et utilisateur séparés.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TempsProcesseur {
+    pub noyau: Duration,
+    pub utilisateur: Duration,
+}
+
+impl TempsProcesseur {
+    pub fn total(&self) -> Duration {
+        self.noyau + self.utilisateur
+    }
+}
+
 /// Temps processeur consommé par le processus (noyau et utilisateur), depuis son lancement.
-pub fn temps_processeur() -> Option<std::time::Duration> {
+pub fn temps_processeur() -> Option<TempsProcesseur> {
     systeme::temps_processeur()
 }
 

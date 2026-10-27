@@ -30,7 +30,7 @@
 - La base technique et la frontière système sont décidées dans `docs/ARCHITECTURE.md`.
 - Tout ce qui dépend d'un système vit dans la couche plateforme, nulle part ailleurs (y compris le raccourci global et la lecture du temps processeur).
 - Une surcouche par écran. Les effets implémentent `rendu::effet::Effet` et se déclarent dans `creer_effets` ; tous leurs paramètres sont dans `coeur::config::Config`.
-- À la fermeture, la sonde écrit une ligne « Bilan » (durée, temps processeur, images) dans `souriso-sonde.txt`.
+- La sonde écrit une ligne « Bilan » dans `souriso-sonde.txt` à la fermeture, et la réécrit toutes les 10 secondes (elle reste la dernière ligne) : durée, temps processeur (noyau et utilisateur), images par écran, réveils, lectures du curseur, échecs d'acquisition, reconfigurations.
 - Aucun droit administrateur ne doit être requis sous Windows.
 
 ## Fonctions dépendant du système
