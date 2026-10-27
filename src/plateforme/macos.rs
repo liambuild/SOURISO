@@ -116,3 +116,14 @@ pub fn jouer_son(wav: &'static [u8]) -> bool {
 }
 
 pub use super::rusage::temps_processeur;
+
+/// `~/Library/Application Support/SOURISO`.
+pub fn dossier_donnees() -> Option<std::path::PathBuf> {
+    let maison = std::env::var_os("HOME").filter(|d| !d.is_empty())?;
+    Some(
+        std::path::PathBuf::from(maison)
+            .join("Library")
+            .join("Application Support")
+            .join("SOURISO"),
+    )
+}

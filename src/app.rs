@@ -1,7 +1,10 @@
 //! Boucle principale : une surcouche par écran, les effets qui suivent le curseur sur l'écran où
-//! il se trouve, un raccourci global par effet pour l'activer ou le couper, les clics lus dans la
-//! même boucle que le curseur.
+//! il se trouve, un raccourci global par effet pour l'activer ou le couper, des profils de
+//! réglages (un raccourci par profil, un pour le suivant), les clics lus dans la même boucle que
+//! le curseur.
 
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -12,8 +15,11 @@ use winit::window::{Window, WindowId};
 
 use crate::coeur::activation::{Activations, ANNEAU, ONDULATION, PROJECTEUR, SON, TRAINEE};
 use crate::coeur::clic::{Bouton, Detecteur};
-use crate::coeur::son::avec_volume;
-use crate::coeur::{Config, Ecran, Point};
+use crate::coeur::config::SonClic;
+use crate::coeur::profil::Profils;
+use crate::coeur::son::{avec_volume, Son};
+use crate::coeur::stockage::{self, Chargement};
+use crate::coeur::{Config, Ecran, Point, Raccourci};
 use crate::plateforme::{self, Icone, RaccourciGlobal};
 use crate::rendu::{Gpu, Rendu};
 use crate::sonde::{self, Compteurs};
@@ -36,6 +42,26 @@ const ACTIVABLES: [(&str, &str); 5] = [
 /// Délai minimal entre deux bascules : une touche maintenue répète l'événement du raccourci.
 const ANTI_REPETITION: Duration = Duration::from_millis(400);
 
+/// Ce que déclenche un raccourci global, dans l'ordre où ils sont demandés au système.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Cible {
+    /// Active ou coupe l'effet `ACTIVABLES[i]`.
+    Effet(usize),
+    /// Passe au profil suivant.
+    Suivant,
+    /// Passe au profil `i` et réactive les effets coupés.
+    Profil(usize),
+}
+
+/// Son de clic mis au volume réglé. La lecture asynchrone du système lit directement ces octets
+/// après le retour de l'appel : ils sont gardés pour toute l'exécution (fuite volontaire, une par
+/// couple son et volume rencontré, quelques dizaines de kilo-octets chacune).
+fn son_pour(sons: &mut HashMap<(Son, u32), &'static [u8]>, reglage: SonClic) -> &'static [u8] {
+    let r = reglage.borne();
+    sons.entry((r.choix, r.volume.to_bits()))
+        .or_insert_with(|| Box::leak(avec_volume(r.choix.wav(), r.volume).into_boxed_slice()))
+}
+
 struct Surcouche {
     fenetre: Arc<Window>,
     ecran: Ecran,
@@ -49,7 +75,15 @@ struct Surcouche {
 }
 
 pub struct App {
+    /// Raccourcis des effets et réglages du profil actif.
     config: Config,
+    profils: Profils,
+    /// Fichier des profils ; `None` si le système ne donne pas de dossier de données.
+    chemin_profils: Option<PathBuf>,
+    cibles: Vec<Cible>,
+    sons: HashMap<(Son, u32), &'static [u8]>,
+    derniere_bascule_profil: Option<Instant>,
+    changements_profil: u64,
     activations: Activations,
     surcouches: Vec<Surcouche>,
     icone: Option<Icone>,
@@ -57,8 +91,7 @@ pub struct App {
     /// Dernière bascule de chaque effet de `ACTIVABLES`.
     dernieres_bascules: [Option<Instant>; ACTIVABLES.len()],
     detecteur: Detecteur,
-    /// Son de clic mis au volume réglé, gardé pour toute l'exécution : la lecture asynchrone du
-    /// système lit directement ces octets.
+    /// Son de clic du profil actif.
     son: &'static [u8],
     pub echec: Option<String>,
     debut: Instant,
@@ -79,14 +112,37 @@ fn curseur_sur(ecran: &Ecran, lectures: &mut u64) -> Option<Point> {
 impl App {
     /// `debut` est l'instant de lancement, point de départ de la durée du bilan.
     pub fn new(debut: Instant) -> Self {
-        let config = Config::default();
-        let reglage_son = config.son.borne();
-        // Fuite volontaire, unique : un seul son de quelques dizaines de kilo-octets pour toute la
-        // durée du processus.
-        let son =
-            Box::leak(avec_volume(reglage_son.choix.wav(), reglage_son.volume).into_boxed_slice());
-        App {
+        let chemin_profils =
+            plateforme::dossier_donnees().map(|dossier| dossier.join(stockage::NOM_FICHIER));
+        let chargement = match &chemin_profils {
+            Some(chemin) => stockage::charger(chemin),
+            None => Chargement {
+                profils: Profils::default(),
+                a_enregistrer: false,
+                messages: vec![
+                    "dossier de données introuvable : profils d'exemple, rien ne sera enregistré"
+                        .into(),
+                ],
+            },
+        };
+        for message in &chargement.messages {
+            crate::sonde::ecrire(&format!("Sonde : profils : {message}"));
+        }
+        let profils = chargement.profils;
+        let config = Config {
+            effets: profils.profil_actif().effets.borne(),
+            ..Config::default()
+        };
+        let mut sons = HashMap::new();
+        let son = son_pour(&mut sons, config.effets.son);
+        let app = App {
             config,
+            profils,
+            chemin_profils,
+            cibles: Vec::new(),
+            sons,
+            derniere_bascule_profil: None,
+            changements_profil: 0,
             activations: Activations::default(),
             surcouches: Vec::new(),
             icone: None,
@@ -102,6 +158,34 @@ impl App {
             clics_gauche: 0,
             clics_droit: 0,
             sons_joues: 0,
+        };
+        if chargement.a_enregistrer {
+            app.enregistrer_profils();
+        }
+        crate::sonde::ecrire(&format!(
+            "Sonde : profil actif « {} » ({} sur {}), adaptateur demandé {:?}, fichier {}",
+            app.profils.profil_actif().nom,
+            app.profils.actif + 1,
+            app.profils.profils.len(),
+            app.profils.adaptateur,
+            app.chemin_profils
+                .as_ref()
+                .map_or("aucun".to_string(), |c| c.display().to_string())
+        ));
+        app
+    }
+
+    /// Écrit le fichier des profils. Un échec va dans la sonde : l'application continue avec les
+    /// profils en mémoire.
+    fn enregistrer_profils(&self) {
+        let Some(chemin) = &self.chemin_profils else {
+            return;
+        };
+        if let Err(e) = stockage::enregistrer(chemin, &self.profils) {
+            crate::sonde::ecrire(&format!(
+                "Sonde : enregistrement des profils impossible ({}) : {e}",
+                chemin.display()
+            ));
         }
     }
 
@@ -121,6 +205,8 @@ impl App {
             clics_gauche: self.clics_gauche,
             clics_droit: self.clics_droit,
             sons_joues: self.sons_joues,
+            profil_actif: self.profils.profil_actif().nom.clone(),
+            changements_profil: self.changements_profil,
         };
         sonde::bilan(
             self.debut.elapsed(),
@@ -137,8 +223,12 @@ impl App {
         }
 
         let cartes = plateforme::cartes_ecrans(&ecrans);
-        let (gpu, premiere) =
-            Gpu::nouveau(event_loop.owned_display_handle(), &fenetres[0], &cartes)?;
+        let (gpu, premiere) = Gpu::nouveau(
+            event_loop.owned_display_handle(),
+            &fenetres[0],
+            &cartes,
+            self.profils.adaptateur,
+        )?;
         let mut premiere = Some(premiere);
         for (indice, (ecran, fenetre)) in ecrans.iter().zip(fenetres).enumerate() {
             let surface = match premiere.take() {
@@ -164,19 +254,29 @@ impl App {
         }
 
         self.icone = Some(plateforme::creer_icone()?);
-        let raccourcis = [
-            self.config.raccourci_projecteur,
-            self.config.raccourci_anneau,
-            self.config.raccourci_trainee,
-            self.config.raccourci_ondulation,
-            self.config.raccourci_son,
-        ];
-        match plateforme::creer_raccourcis(&raccourcis) {
+        // Dans l'ordre : les effets, le profil suivant, puis chaque profil qui a un raccourci.
+        let mut demandes: Vec<Raccourci> = self.config.raccourcis_effets().to_vec();
+        self.cibles = (0..demandes.len()).map(Cible::Effet).collect();
+        if let Some(r) = self.profils.raccourci_suivant {
+            demandes.push(r);
+            self.cibles.push(Cible::Suivant);
+        }
+        for (indice, profil) in self.profils.profils.iter().enumerate() {
+            if let Some(r) = profil.raccourci {
+                demandes.push(r);
+                self.cibles.push(Cible::Profil(indice));
+            }
+        }
+        match plateforme::creer_raccourcis(&demandes) {
             Ok(raccourci) => {
                 for (indice, e) in &raccourci.refus {
+                    let qui = match self.cibles[*indice] {
+                        Cible::Effet(i) => ACTIVABLES[i].1.to_string(),
+                        Cible::Suivant => "Profil suivant".to_string(),
+                        Cible::Profil(i) => format!("Profil « {} »", self.profils.profils[i].nom),
+                    };
                     crate::sonde::ecrire(&format!(
-                        "Sonde : raccourci global « {} » indisponible : {e}",
-                        ACTIVABLES[*indice].1
+                        "Sonde : raccourci global « {qui} » indisponible : {e}"
                     ));
                 }
                 self.raccourci = Some(raccourci);
@@ -211,6 +311,47 @@ impl App {
             "{libelle} {}",
             if actif { "activé" } else { "coupé" }
         ));
+        for s in &mut self.surcouches {
+            s.a_redessiner = true;
+        }
+    }
+
+    /// Passe au profil `indice`. `par_raccourci_du_profil` : le raccourci propre au profil, qui
+    /// réactive aussi les effets coupés (celui du profil suivant ne le fait pas). Le profil est
+    /// appliqué aux effets en place, sans recréer de pipeline ni de présentation, et le dernier
+    /// profil utilisé est enregistré.
+    fn passer_au_profil(&mut self, indice: usize, origine: &str, par_raccourci_du_profil: bool) {
+        let maintenant = Instant::now();
+        if self
+            .derniere_bascule_profil
+            .is_some_and(|t| maintenant.duration_since(t) < ANTI_REPETITION)
+        {
+            return;
+        }
+        self.derniere_bascule_profil = Some(maintenant);
+        let ancien = self.profils.actif;
+        if self.profils.activer(indice).is_err() {
+            return;
+        }
+        if par_raccourci_du_profil {
+            self.activations.tout_activer();
+        }
+        let nom = self.profils.profil_actif().nom.clone();
+        if indice == ancien {
+            crate::sonde::ecrire(&format!("Sonde : profil « {nom} » conservé ({origine})"));
+        } else {
+            self.config.effets = self.profils.profil_actif().effets.borne();
+            self.son = son_pour(&mut self.sons, self.config.effets.son);
+            for s in &mut self.surcouches {
+                s.rendu.appliquer(&self.config.effets);
+            }
+            self.changements_profil += 1;
+            crate::sonde::ecrire(&format!(
+                "Sonde : profil « {} » → « {nom} » ({origine})",
+                self.profils.profils[ancien].nom
+            ));
+            self.enregistrer_profils();
+        }
         for s in &mut self.surcouches {
             s.a_redessiner = true;
         }
@@ -297,7 +438,17 @@ impl ApplicationHandler for App {
             .map(RaccourciGlobal::activations_demandees)
             .unwrap_or_default()
         {
-            self.basculer(indice);
+            match self.cibles.get(indice).copied() {
+                Some(Cible::Effet(i)) => self.basculer(i),
+                Some(Cible::Suivant) => {
+                    let suivant = self.profils.indice_suivant();
+                    self.passer_au_profil(suivant, "raccourci du profil suivant", false);
+                }
+                Some(Cible::Profil(i)) => {
+                    self.passer_au_profil(i, "raccourci du profil", true);
+                }
+                None => {}
+            }
         }
         if self.dernier_bilan.elapsed() >= PERIODE_BILAN {
             self.dernier_bilan = Instant::now();

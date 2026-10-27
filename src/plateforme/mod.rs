@@ -133,6 +133,13 @@ pub fn jouer_son(wav: &'static [u8]) -> bool {
     systeme::jouer_son(wav)
 }
 
+/// Dossier de données de l'utilisateur pour cette application (créé à l'écriture, pas ici) :
+/// `%APPDATA%\SOURISO` sous Windows, `~/Library/Application Support/SOURISO` sous macOS. `None`
+/// si le système n'en donne pas.
+pub fn dossier_donnees() -> Option<std::path::PathBuf> {
+    systeme::dossier_donnees()
+}
+
 /// Crée l'icône de barre de menus ou de zone de notification, avec une entrée « Quitter ».
 pub fn creer_icone() -> Result<Icone, String> {
     Icone::creer()

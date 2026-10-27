@@ -4,7 +4,7 @@
 use bytemuck::{Pod, Zeroable};
 
 use crate::coeur::activation::ANNEAU;
-use crate::coeur::config;
+use crate::coeur::config::{self, Effets};
 
 use super::commun::Passe;
 use super::effet::{Contexte, Effet, Sortie};
@@ -66,6 +66,10 @@ impl Anneau {
 impl Effet for Anneau {
     fn nom(&self) -> &'static str {
         ANNEAU
+    }
+
+    fn appliquer(&mut self, effets: &Effets) {
+        self.reglages = effets.anneau.borne();
     }
 
     fn preparer(&mut self, queue: &wgpu::Queue, contexte: &Contexte) {

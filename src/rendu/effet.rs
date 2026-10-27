@@ -4,6 +4,7 @@
 use std::time::Instant;
 
 use crate::coeur::clic::Bouton;
+use crate::coeur::config::Effets;
 use crate::coeur::{Config, Point};
 
 use super::anneau::Anneau;
@@ -43,6 +44,10 @@ pub trait Effet {
     /// Nom stable, clé de `coeur::activation::Activations`.
     fn nom(&self) -> &'static str;
 
+    /// Remplace les réglages de l'effet (changement de profil) sans toucher à son état : la
+    /// traînée et les ondulations en cours continuent avec les nouvelles valeurs.
+    fn appliquer(&mut self, effets: &Effets);
+
     /// Met à jour les données envoyées au GPU pour l'image à venir.
     fn preparer(&mut self, queue: &wgpu::Queue, contexte: &Contexte);
 
@@ -67,9 +72,17 @@ pub fn creer_effets(
     config: &Config,
 ) -> Vec<Box<dyn Effet>> {
     vec![
-        Box::new(Projecteur::nouveau(device, sortie, config.projecteur)),
-        Box::new(Trainee::nouveau(device, sortie, config.trainee)),
-        Box::new(Anneau::nouveau(device, sortie, config.anneau)),
-        Box::new(Ondulation::nouveau(device, sortie, config.ondulation)),
+        Box::new(Projecteur::nouveau(
+            device,
+            sortie,
+            config.effets.projecteur,
+        )),
+        Box::new(Trainee::nouveau(device, sortie, config.effets.trainee)),
+        Box::new(Anneau::nouveau(device, sortie, config.effets.anneau)),
+        Box::new(Ondulation::nouveau(
+            device,
+            sortie,
+            config.effets.ondulation,
+        )),
     ]
 }

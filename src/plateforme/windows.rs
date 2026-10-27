@@ -190,3 +190,9 @@ pub fn temps_processeur() -> Option<TempsProcesseur> {
         utilisateur: duree(utilisateur),
     })
 }
+
+/// `%APPDATA%\SOURISO` : le dossier de données itinérant de l'utilisateur, sans droit particulier.
+pub fn dossier_donnees() -> Option<std::path::PathBuf> {
+    let base = std::env::var_os("APPDATA").filter(|d| !d.is_empty())?;
+    Some(std::path::PathBuf::from(base).join("SOURISO"))
+}
