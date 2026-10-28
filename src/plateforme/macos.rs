@@ -127,3 +127,26 @@ pub fn dossier_donnees() -> Option<std::path::PathBuf> {
             .join("SOURISO"),
     )
 }
+
+/// WKWebView fait partie du système : le moteur web est toujours là.
+pub fn moteur_web_disponible() -> bool {
+    true
+}
+
+/// Boîte de dialogue du système, par `osascript` (aucune permission : il ne pilote aucune autre
+/// application). Dans un fil, pour ne pas arrêter la lecture du curseur. Le texte ne contient ni
+/// guillemet ni barre oblique inverse : il est écrit par ce programme.
+pub fn afficher_boite(texte: &str) {
+    let script = format!(
+        "display dialog \"{}\" with title \"SOURISO\" buttons {{\"OK\"}} default button 1 with icon note",
+        texte.replace(['"', '\\'], "'").replace('\n', "\" & return & \"")
+    );
+    std::thread::spawn(move || {
+        let _ = std::process::Command::new("osascript")
+            .args(["-e", &script])
+            .status();
+    });
+}
+
+/// Rien à régler pour lancer le processus des réglages.
+pub fn preparer_enfant(_commande: &mut std::process::Command) {}

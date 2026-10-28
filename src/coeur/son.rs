@@ -19,6 +19,27 @@ pub enum Son {
 const ENTETE: usize = 44;
 
 impl Son {
+    /// Tous les sons, dans l'ordre où l'interface les propose.
+    pub const TOUS: [Son; 3] = [Son::Clic, Son::Bulle, Son::Cloche];
+
+    /// Identifiant stable, celui du fichier des profils.
+    pub fn id(self) -> &'static str {
+        match self {
+            Son::Clic => "clic",
+            Son::Bulle => "bulle",
+            Son::Cloche => "cloche",
+        }
+    }
+
+    /// Nom montré à l'utilisateur.
+    pub fn libelle(self) -> &'static str {
+        match self {
+            Son::Clic => "Clic",
+            Son::Bulle => "Bulle",
+            Son::Cloche => "Cloche",
+        }
+    }
+
     /// Fichier WAV embarqué (PCM 16 bits, mono).
     pub fn wav(self) -> &'static [u8] {
         match self {
@@ -46,7 +67,15 @@ pub fn avec_volume(wav: &[u8], volume: f32) -> Vec<u8> {
 mod tests {
     use super::*;
 
-    const TOUS: [Son; 3] = [Son::Clic, Son::Bulle, Son::Cloche];
+    #[test]
+    fn l_identifiant_est_celui_du_fichier_des_profils() {
+        for son in Son::TOUS {
+            let json = serde_json::to_string(&son).unwrap();
+            assert_eq!(json, format!("\"{}\"", son.id()));
+        }
+    }
+
+    const TOUS: [Son; 3] = Son::TOUS;
 
     #[test]
     fn les_sons_embarques_sont_des_wav_pcm_16_bits_mono() {

@@ -276,6 +276,8 @@ pub struct Rendu {
     queue: wgpu::Queue,
     effets: Vec<Box<dyn Effet>>,
     statistiques: Statistiques,
+    /// Zone sans voile (fenêtre de réglages), en pixels physiques de cette surface.
+    exemption: Option<[f32; 4]>,
 }
 
 impl Rendu {
@@ -346,6 +348,7 @@ impl Rendu {
             queue: gpu.queue.clone(),
             effets: creer_effets(&gpu.device, &sortie, reglages),
             statistiques: Statistiques::default(),
+            exemption: None,
         })
     }
 
@@ -355,6 +358,14 @@ impl Rendu {
         for effet in &mut self.effets {
             effet.appliquer(effets);
         }
+    }
+
+    /// Fixe la zone où le voile ne s'applique pas. Renvoie vrai si elle a changé (l'image est
+    /// alors à redessiner).
+    pub fn exempter(&mut self, zone: Option<[f32; 4]>) -> bool {
+        let change = self.exemption != zone;
+        self.exemption = zone;
+        change
     }
 
     pub fn statistiques(&self) -> Statistiques {
@@ -421,6 +432,7 @@ impl Rendu {
             echelle: ecran.echelle as f32,
             taille: (self.config.width as f32, self.config.height as f32),
             maintenant: Instant::now(),
+            exemption: self.exemption,
         };
         for effet in &mut self.effets {
             if activations.est_actif(effet.nom()) {

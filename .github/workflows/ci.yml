@@ -24,19 +24,23 @@ jobs:
         shell: bash
         run: ./scripts/verifier-frontiere.sh
       - name: Format
-        run: cargo fmt --check
+        run: cargo fmt --all --check
       - name: Lint
-        run: cargo clippy --all-targets --locked -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Tests
-        run: cargo test --locked
-      - name: Compilation
-        run: cargo build --release --locked
-      - name: Conserver l'exécutable (7 jours)
+        run: cargo test --workspace --locked
+      - name: Compilation (les deux exécutables)
+        run: cargo build --release --locked --workspace
+      - name: Conserver les exécutables (7 jours)
         uses: actions/upload-artifact@v4
         with:
           name: souriso-${{ runner.os }}
+          # Les deux exécutables, côte à côte à la racine de l'archive : `souriso` cherche
+          # `souriso-reglages` dans son propre dossier.
           path: |
             target/release/souriso
             target/release/souriso.exe
+            target/release/souriso-reglages
+            target/release/souriso-reglages.exe
           if-no-files-found: error
           retention-days: 7

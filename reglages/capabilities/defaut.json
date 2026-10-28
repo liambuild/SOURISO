@@ -1,0 +1,6 @@
+{
+  "identifier": "defaut",
+  "description": "La page écoute les messages du processus principal ; rien d'autre (ni fichier, ni réseau, ni processus).",
+  "windows": ["main"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}

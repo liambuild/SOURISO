@@ -5,7 +5,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use super::profil::{Profils, VERSION_FORMAT};
+use super::profil::{Profils, VERSION_FORMAT, VERSION_MINIMALE};
 
 pub const NOM_FICHIER: &str = "profils.json";
 
@@ -21,6 +21,11 @@ pub struct Chargement {
 
 fn copie_corrompue(chemin: &Path) -> PathBuf {
     chemin.with_extension("json.corrompu")
+}
+
+/// Copie du fichier d'une version plus ancienne, gardée avant qu'il soit réécrit au format actuel.
+fn copie_ancienne(chemin: &Path, version: u32) -> PathBuf {
+    chemin.with_extension(format!("json.v{version}"))
 }
 
 /// Lit les profils. Fichier absent : premier lancement. Fichier illisible, mal formé ou d'une
@@ -47,14 +52,31 @@ pub fn charger(chemin: &Path) -> Chargement {
         }
     };
     match analyser(&octets) {
-        Ok((profils, corrections)) => Chargement {
-            profils,
-            a_enregistrer: false,
-            messages: corrections
-                .into_iter()
-                .map(|c| format!("profils corrigés à la lecture : {c}"))
-                .collect(),
-        },
+        Ok((profils, version, corrections)) => {
+            let mut messages = Vec::new();
+            let migre = version != VERSION_FORMAT;
+            if migre {
+                let de_cote = copie_ancienne(chemin, version);
+                let sort = match std::fs::write(&de_cote, &octets) {
+                    Ok(()) => format!("copie conservée sous {}", de_cote.display()),
+                    Err(e) => format!("copie non conservée ({e})"),
+                };
+                messages.push(format!(
+                    "fichier des profils migré de la version {version} à la version \
+                     {VERSION_FORMAT} (tous les effets actifs) : {sort}"
+                ));
+            }
+            messages.extend(
+                corrections
+                    .into_iter()
+                    .map(|c| format!("profils corrigés à la lecture : {c}")),
+            );
+            Chargement {
+                profils,
+                a_enregistrer: migre,
+                messages,
+            }
+        }
         Err(raison) => {
             let de_cote = copie_corrompue(chemin);
             let sort = match std::fs::rename(chemin, &de_cote) {
@@ -73,19 +95,23 @@ pub fn charger(chemin: &Path) -> Chargement {
 }
 
 /// Décode le contenu du fichier. Le numéro de version se lit avant le reste : un fichier d'une
-/// autre version n'est pas interprété avec les règles de celle-ci.
-fn analyser(octets: &[u8]) -> Result<(Profils, Vec<String>), String> {
+/// version inconnue n'est pas interprété avec les règles de celle-ci. Une version plus ancienne
+/// (de `VERSION_MINIMALE` à la courante) est lue telle quelle : les champs qu'elle n'a pas
+/// prennent leur valeur par défaut (pour la 1, tous les effets actifs). Renvoie la version lue.
+fn analyser(octets: &[u8]) -> Result<(Profils, u32, Vec<String>), String> {
     let valeur: serde_json::Value =
         serde_json::from_slice(octets).map_err(|e| format!("JSON invalide : {e}"))?;
-    match valeur.get("version").and_then(serde_json::Value::as_u64) {
-        Some(v) if v == u64::from(VERSION_FORMAT) => {}
+    let version = match valeur.get("version").and_then(serde_json::Value::as_u64) {
+        Some(v) if (VERSION_MINIMALE..=VERSION_FORMAT).contains(&(v as u32)) && v < 1 << 32 => {
+            v as u32
+        }
         Some(v) => return Err(format!("version {v} du format non prise en charge")),
         None => return Err("numéro de version absent".into()),
-    }
+    };
     let mut profils: Profils =
         serde_json::from_value(valeur).map_err(|e| format!("contenu invalide : {e}"))?;
     let corrections = profils.normaliser();
-    Ok((profils, corrections))
+    Ok((profils, version, corrections))
 }
 
 /// Écrit les profils : dans un fichier voisin d'abord, puis renommé, pour qu'une coupure en cours
@@ -171,7 +197,8 @@ mod tests {
         let d = Dossier::new("version");
         enregistrer(&d.fichier(), &Profils::default()).unwrap();
         let texte = std::fs::read_to_string(d.fichier()).unwrap();
-        assert!(texte.contains("\"version\": 1"), "{texte}");
+        assert!(texte.contains("\"version\": 2"), "{texte}");
+        assert!(texte.contains("\"actifs\""), "{texte}");
     }
 
     fn corrompu(nom: &str, contenu: &[u8]) {
@@ -202,8 +229,58 @@ mod tests {
         corrompu("pas-un-objet", b"[1, 2, 3]");
         corrompu("mauvais-type", b"{\"version\": 1, \"actif\": \"trois\"}");
         corrompu("sans-version", b"{\"profils\": []}");
-        corrompu("version-future", b"{\"version\": 2, \"profils\": []}");
+        corrompu("version-future", b"{\"version\": 3, \"profils\": []}");
         corrompu("version-zero", b"{\"version\": 0}");
+    }
+
+    #[test]
+    fn un_fichier_de_version_1_est_migre_avec_tous_les_effets_actifs() {
+        let d = Dossier::new("migration");
+        let ancien = br#"{"version": 1, "actif": 1, "adaptateur": "econome", "profils": [
+            {"nom": "Defaut"},
+            {"nom": "Cours", "raccourci": {"ctrl": true, "alt": true, "maj": true, "touche": "K"},
+             "effets": {"anneau": {"rayon": 50.0}}}]}"#;
+        std::fs::write(d.fichier(), ancien).unwrap();
+        let c = charger(&d.fichier());
+        assert!(c.a_enregistrer, "à réécrire au format actuel");
+        assert_eq!(c.messages.len(), 1, "{:?}", c.messages);
+        assert!(
+            c.messages[0].contains("migré de la version 1"),
+            "{:?}",
+            c.messages
+        );
+        let p = &c.profils;
+        assert_eq!(
+            (p.version, p.actif, p.profils.len()),
+            (VERSION_FORMAT, 1, 2)
+        );
+        assert_eq!(p.adaptateur, Adaptateur::Econome);
+        assert!(p.profils.iter().all(|x| x.actifs == Default::default()));
+        assert_eq!(p.profils[1].effets.anneau.rayon, 50.0, "réglages conservés");
+        assert_eq!(std::fs::read(d.0.join("profils.json.v1")).unwrap(), ancien);
+        assert!(
+            d.fichier().exists(),
+            "le fichier d'origine reste jusqu'à la réécriture"
+        );
+        enregistrer(&d.fichier(), &c.profils).unwrap();
+        let relu = charger(&d.fichier());
+        assert_eq!(relu.profils, c.profils);
+        assert!(
+            !relu.a_enregistrer && relu.messages.is_empty(),
+            "plus de migration"
+        );
+    }
+
+    #[test]
+    fn l_activation_enregistree_dans_un_profil_survit_a_un_aller_retour() {
+        let d = Dossier::new("actifs");
+        let mut p = Profils::default();
+        p.profils[2].actifs.son = false;
+        p.profils[1].actifs.projecteur = false;
+        enregistrer(&d.fichier(), &p).unwrap();
+        let c = charger(&d.fichier());
+        assert_eq!(c.profils, p);
+        assert!(!c.profils.profils[2].actifs.son && c.profils.profils[2].actifs.anneau);
     }
 
     #[test]

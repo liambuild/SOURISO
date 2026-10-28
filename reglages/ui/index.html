@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Réglages de SOURISO</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="evitement" href="#contenu">Aller au contenu</a>
+  <div class="appli">
+    <header class="barre">
+      <div class="champ-profil">
+        <label for="profil-actif">Profil</label>
+        <select id="profil-actif" data-cle="profil-actif"></select>
+      </div>
+      <div class="barre-fin">
+        <p id="statut" class="statut" role="status" aria-live="polite"></p>
+        <button id="revenir" type="button" class="bouton">
+          <span class="icone" id="icone-revenir" aria-hidden="true"></span>
+          Revenir aux valeurs du profil
+        </button>
+      </div>
+    </header>
+    <nav class="navigation" aria-label="Sections des réglages">
+      <div id="onglets" role="tablist" aria-orientation="vertical"></div>
+    </nav>
+    <main id="contenu" class="contenu" tabindex="-1">
+      <div id="page" role="tabpanel"></div>
+    </main>
+  </div>
+</body>
+</html>

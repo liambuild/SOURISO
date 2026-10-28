@@ -1,0 +1,329 @@
+/* Réglages de SOURISO. Aucune ressource distante : polices du système, icônes en SVG dans app.js.
+   Les couleurs sont des jetons ; le thème suit le système. Les paires texte/fond sont vérifiées
+   par un test du crate (contraste ≥ 4,5:1 pour le texte, ≥ 3:1 pour le contour des contrôles). */
+
+:root {
+  color-scheme: light dark;
+  --fond: #f4f5f7;
+  --surface: #ffffff;
+  --separateur: #d5d9e0;
+  --contour: #737b88;
+  --texte: #1b1f24;
+  --texte-2: #4a5260;
+  --accent: #1c5bd0;
+  --sur-accent: #ffffff;
+  --accent-doux: #e3ecfc;
+  --danger: #b3261e;
+  --ombre: 0 1px 2px rgb(20 24 31 / 8%), 0 4px 14px rgb(20 24 31 / 6%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fond: #121418;
+    --surface: #1b1e24;
+    --separateur: #2f343d;
+    --contour: #8b94a3;
+    --texte: #e9ebef;
+    --texte-2: #aeb5c1;
+    --accent: #7aa8ff;
+    --sur-accent: #0a1020;
+    --accent-doux: #22304d;
+    --danger: #ff8d85;
+    --ombre: 0 1px 2px rgb(0 0 0 / 40%);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--fond);
+  color: var(--texte);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 { font-size: 22px; line-height: 1.2; margin: 0 0 4px; font-weight: 650; letter-spacing: -0.01em; }
+h2 { font-size: 15px; margin: 28px 0 8px; font-weight: 650; }
+p { margin: 0; }
+
+.evitement {
+  position: absolute;
+  left: 8px;
+  top: -48px;
+  z-index: 10;
+  padding: 8px 12px;
+  background: var(--accent);
+  color: var(--sur-accent);
+  border-radius: 8px;
+}
+.evitement:focus { top: 8px; }
+
+/* --- Disposition : barre en haut, sections à gauche, page à droite --------------------------- */
+
+.appli {
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.barre {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--separateur);
+}
+
+.champ-profil { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.champ-profil label { font-weight: 600; }
+.champ-profil select { min-width: 180px; max-width: 280px; }
+
+.barre-fin { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.statut { color: var(--texte-2); font-size: 13px; text-align: right; }
+.statut.alerte { color: var(--danger); font-weight: 600; }
+
+.navigation {
+  padding: 12px 8px;
+  border-right: 1px solid var(--separateur);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+#onglets { display: flex; flex-direction: column; gap: 2px; }
+
+.contenu {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding: 22px 28px 28px;
+  outline: none;
+}
+#page { max-width: 640px; }
+
+/* --- Sections ------------------------------------------------------------------------------- */
+
+.onglet {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--texte);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.onglet:hover { background: var(--accent-doux); }
+.onglet[aria-selected="true"] { background: var(--accent-doux); font-weight: 650; box-shadow: inset 3px 0 0 var(--accent); }
+.onglet .etat { font-size: 12px; color: var(--texte-2); font-weight: 400; }
+.onglet .etat.coupe { font-style: italic; }
+.separateur-nav { height: 1px; margin: 8px 6px; background: var(--separateur); }
+
+/* --- Page d'un effet ------------------------------------------------------------------------ */
+
+.entete { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.description { color: var(--texte-2); }
+
+.interrupteur {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 4px 4px 4px 12px;
+  border: 1px solid var(--contour);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--texte);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  flex: none;
+}
+.interrupteur .piste {
+  position: relative;
+  width: 40px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--contour);
+  transition: background 0.15s;
+}
+.interrupteur .piste::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--surface);
+  transition: transform 0.15s;
+}
+.interrupteur[aria-checked="true"] .piste { background: var(--accent); }
+.interrupteur[aria-checked="true"] .piste::after { transform: translateX(16px); background: var(--sur-accent); }
+
+.note {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--accent-doux);
+  color: var(--texte);
+  font-size: 13px;
+}
+.note.coupe { border-left: 3px solid var(--accent); }
+
+.groupe {
+  margin-top: 18px;
+  padding: 4px 16px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--ombre);
+}
+
+.reglage {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) minmax(150px, 1.6fr) 104px;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 10px 0;
+}
+.reglage + .reglage { border-top: 1px solid var(--separateur); }
+.reglage .libelle { font-weight: 600; }
+.reglage .aide { grid-column: 1; color: var(--texte-2); font-size: 12.5px; line-height: 1.35; }
+.reglage .controle { grid-column: 2 / 4; grid-row: 1 / span 2; display: flex; align-items: center; gap: 12px; min-width: 0; }
+.reglage .controle input[type="range"] { flex: 1; min-width: 0; }
+
+.nombre { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.nombre input { width: 68px; text-align: right; }
+.nombre .unite { width: 22px; color: var(--texte-2); font-size: 13px; }
+
+.pastilles { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pastille {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--contour);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.pastille[aria-pressed="true"] { outline: 2px solid var(--texte); outline-offset: 2px; }
+input[type="color"] {
+  width: 40px;
+  height: 30px;
+  padding: 2px;
+  border: 1px solid var(--contour);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+/* --- Profils -------------------------------------------------------------------------------- */
+
+.liste-profils { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+.profil {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--ombre);
+}
+.profil.actif { outline: 2px solid var(--accent); }
+.profil-ligne { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.profil-nom { flex: 1 1 140px; display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 600; }
+.profil-nom label { cursor: pointer; overflow-wrap: anywhere; }
+.profil-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.etiquette { font-size: 12px; font-weight: 400; color: var(--texte-2); }
+.profil-confirmation { margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.nouveau { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.nouveau input { flex: 1 1 200px; max-width: 320px; }
+
+.raccourci {
+  min-width: 190px;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--contour);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--texte);
+  font: inherit;
+  cursor: pointer;
+  text-align: center;
+}
+.raccourci.vide { color: var(--texte-2); font-style: italic; }
+.raccourci.saisie { border-color: var(--accent); background: var(--accent-doux); }
+.erreur { margin-top: 6px; color: var(--danger); font-weight: 600; font-size: 13px; display: flex; gap: 6px; align-items: center; }
+
+.choix { display: grid; gap: 8px; margin-top: 14px; }
+.choix label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--ombre);
+  cursor: pointer;
+}
+.choix label:has(input:checked) { outline: 2px solid var(--accent); }
+.choix .titre { font-weight: 600; display: block; }
+.choix .aide { color: var(--texte-2); font-size: 12.5px; }
+
+/* --- Contrôles ------------------------------------------------------------------------------ */
+
+.bouton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--contour);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--texte);
+  font: inherit;
+  cursor: pointer;
+}
+.bouton:hover:not(:disabled) { background: var(--accent-doux); }
+.bouton:disabled { opacity: 0.55; cursor: default; }
+.bouton.principal { background: var(--accent); border-color: var(--accent); color: var(--sur-accent); font-weight: 600; }
+.bouton.principal:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+.bouton.danger { color: var(--danger); }
+
+input[type="text"], input[type="number"], select {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--contour);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--texte);
+  font: inherit;
+}
+
+::placeholder { color: var(--texte-2); opacity: 1; }
+
+input[type="range"] { accent-color: var(--accent); height: 28px; margin: 0; }
+input[type="radio"] { accent-color: var(--accent); width: 18px; height: 18px; margin: 1px 0 0; flex: none; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.icone { display: inline-flex; width: 16px; height: 16px; }
+.icone svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+@media (forced-colors: active) {
+  .interrupteur .piste, .onglet[aria-selected="true"] { forced-color-adjust: none; }
+}

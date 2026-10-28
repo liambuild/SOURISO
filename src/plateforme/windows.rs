@@ -9,9 +9,16 @@ use windows_sys::Win32::Graphics::Gdi::{
     ENUM_CURRENT_SETTINGS,
 };
 use windows_sys::Win32::Media::Audio::{PlaySoundW, SND_ASYNC, SND_MEMORY, SND_NODEFAULT};
-use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
+use windows_sys::Win32::System::Registry::{
+    RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE,
+    KEY_READ,
+};
+use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes, CREATE_NO_WINDOW};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
-use windows_sys::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetSystemMetrics, SM_SWAPBUTTON};
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    GetCursorPos, GetSystemMetrics, MessageBoxW, MB_ICONINFORMATION, MB_OK, MB_SETFOREGROUND,
+    MB_TOPMOST, SM_SWAPBUTTON,
+};
 use winit::event_loop::{ActiveEventLoop, EventLoop, OwnedDisplayHandle};
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{Window, WindowAttributes, WindowLevel};
@@ -195,4 +202,82 @@ pub fn temps_processeur() -> Option<TempsProcesseur> {
 pub fn dossier_donnees() -> Option<std::path::PathBuf> {
     let base = std::env::var_os("APPDATA").filter(|d| !d.is_empty())?;
     Some(std::path::PathBuf::from(base).join("SOURISO"))
+}
+
+/// Texte en UTF-16 terminé par un zéro, tel que l'attendent les fonctions `W` de Windows.
+fn utf16(texte: &str) -> Vec<u16> {
+    texte.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+/// Version du moteur web WebView2 inscrite sous `racine\cle`, s'il y en a une.
+fn version_webview2(racine: HKEY, cle: &str) -> Option<String> {
+    let cle = utf16(cle);
+    let nom = utf16("pv");
+    let mut ouverte: HKEY = std::ptr::null_mut();
+    // SAFETY: les tampons vivent pendant l'appel ; la clé ouverte est refermée avant de sortir.
+    unsafe {
+        if RegOpenKeyExW(racine, cle.as_ptr(), 0, KEY_READ, &mut ouverte) != 0 {
+            return None;
+        }
+        let mut octets = [0u16; 64];
+        let mut taille = std::mem::size_of_val(&octets) as u32;
+        let etat = RegQueryValueExW(
+            ouverte,
+            nom.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null_mut(),
+            octets.as_mut_ptr().cast(),
+            &mut taille,
+        );
+        RegCloseKey(ouverte);
+        if etat != 0 {
+            return None;
+        }
+        let n = (taille as usize / 2).min(octets.len());
+        let texte = String::from_utf16_lossy(&octets[..n]);
+        Some(texte.trim_end_matches('\0').to_string())
+    }
+}
+
+/// Vrai si le moteur web WebView2 est installé (pour la machine ou pour l'utilisateur). Il est
+/// inscrit par son installeur sous la clé du composant « EdgeUpdate » ; rien n'est téléchargé.
+pub fn moteur_web_disponible() -> bool {
+    const COMPOSANT: &str =
+        "Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
+    let emplacements = [
+        (
+            HKEY_LOCAL_MACHINE,
+            format!("SOFTWARE\\WOW6432Node\\{COMPOSANT}"),
+        ),
+        (HKEY_LOCAL_MACHINE, format!("SOFTWARE\\{COMPOSANT}")),
+        (HKEY_CURRENT_USER, format!("Software\\{COMPOSANT}")),
+    ];
+    emplacements.iter().any(|(racine, cle)| {
+        version_webview2(*racine, cle).is_some_and(|v| !v.is_empty() && v != "0.0.0.0")
+    })
+}
+
+/// Boîte native qui montre un message, dans son propre fil : sa boucle de messages ne doit pas
+/// arrêter la lecture du curseur, ni donc les effets. Elle reste au premier plan, car la surcouche
+/// l'est aussi.
+pub fn afficher_boite(texte: &str) {
+    let texte = utf16(texte);
+    std::thread::spawn(move || {
+        let titre = utf16("SOURISO");
+        // SAFETY: les deux textes sont terminés par un zéro et vivent pendant l'appel.
+        unsafe {
+            MessageBoxW(
+                std::ptr::null_mut(),
+                texte.as_ptr(),
+                titre.as_ptr(),
+                MB_OK | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND,
+            );
+        }
+    });
+}
+
+/// Le processus des réglages n'ouvre pas de console : seule sa fenêtre apparaît.
+pub fn preparer_enfant(commande: &mut std::process::Command) {
+    use std::os::windows::process::CommandExt;
+    commande.creation_flags(CREATE_NO_WINDOW);
 }
