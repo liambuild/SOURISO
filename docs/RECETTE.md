@@ -576,3 +576,26 @@ Je ne conclus rien : les résultats attendus ci-dessous sont des hypothèses à 
 
 - [x] Format, lint (`-D warnings`), 109 tests, frontière système et compilation release réussissent sous Linux. Les tests de `coeur::cadence` montrent, avec une horloge simulée : 7 500 réveils sur 60 s en activité contre 3 813 au repos ; retour à 8 ms au premier signe d'activité ; aucune image sur un écran sans curseur ni animation ; franchissement entre trois écrans d'échelles 100 %, 150 % et 200 % (écran quitté effacé, écran atteint dessiné dans le même réveil). La conversion de position propre à chaque système n'y est pas exercée.
 - [ ] La CI est verte sur Windows et sur macOS.
+
+## fix/reglages-carte-null
+
+L'onglet « Carte graphique » de la fenêtre de réglages affichait le mot « null » sous la phrase d'introduction. Cause : `pageCarte()` renvoie `null` à la place de la note d'imposition quand aucune variable d'environnement n'impose la carte, et `replaceChildren(...)` écrit ce `null` tel quel dans la page. Correctif : `rendrePage()` écarte les éléments absents pour toutes les pages. Le choix Automatique, Économe ou Performant était déjà écrit dans `profils.json` et relu tel quel ; un test le démontre maintenant pour les trois valeurs (`chaque_choix_de_carte_est_ecrit_puis_relu_tel_quel`). Vérifié sous Linux seulement : l'essai de la page (jsdom, `reglages/essais/page.test.js`) échoue sans le correctif et réussit avec.
+
+### Scénarios
+
+| # | Scénario | Attendu | Windows | macOS |
+|---|---|---|---|---|
+| W116 | Fenêtre de réglages, onglet « Carte graphique », aucune variable `WGPU_*` définie | Sous la phrase d'introduction, aucun texte « null » ni ligne vide : la page enchaîne directement sur les trois choix, puis sur la note « Ce choix s'appliquera au prochain lancement de SOURISO. » | non testé | non testé |
+| W117 | Lancer avec `WGPU_POWER_PREF=high` (puis `WGPU_ADAPTER_NAME=Intel`), ouvrir l'onglet | Sous l'introduction, la ligne « Ce choix est imposé par la variable d'environnement WGPU_POWER_PREF : le réglage ci-dessous est sans effet tant qu'elle est définie. » (le nom de la variable qui impose, `WGPU_ADAPTER_NAME` si les deux sont définies) ; les trois choix sont grisés ; aucun « null » | non testé | non testé |
+| W118 | Choisir Automatique, puis quitter par l'icône, relancer (sans variable) ; refaire avec Économe, puis avec Performant | `profils.json` porte `"adaptateur": "automatique"`, `"econome"`, `"performant"` selon le dernier choix ; l'onglet à la réouverture coche ce choix, jamais « Performant » par défaut ; la ligne « Sonde : profil actif … adaptateur demandé » du lancement suivant cite le même choix | non testé | non testé |
+
+### Cases à cocher (fix/reglages-carte-null)
+
+- [ ] W116 : aucun « null » sans variable d'environnement (Windows, macOS)
+- [ ] W117 : ligne d'imposition par variable d'environnement (Windows, macOS)
+- [ ] W118 : choix de carte écrit et relu à chaque lancement (Windows, macOS)
+
+### Vérifications automatiques
+
+- [x] Test du cœur : chacun des trois choix est écrit dans le fichier puis relu tel quel, en partant d'un autre choix. Essai de la page : aucun « null » affiché, avec ou sans variable d'imposition, et la ligne d'imposition est celle attendue (échoue sans le correctif).
+- [ ] La CI est verte sur Windows et sur macOS.
