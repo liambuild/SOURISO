@@ -104,7 +104,24 @@ pub fn creer_surcouche(event_loop: &ActiveEventLoop, ecran: &Ecran) -> Result<Ar
     fenetre
         .set_cursor_hittest(false)
         .map_err(|e| format!("surcouche non traversable : {e}"))?;
+    imposer_geometrie(&fenetre, ecran);
     Ok(Arc::new(fenetre))
+}
+
+/// Remet la surcouche exactement sur son écran : position, puis taille en pixels physiques. Une
+/// fenêtre créée alors qu'un autre écran (d'une autre échelle d'affichage) fait référence peut
+/// garder la taille de celui-là ; la position vient en premier pour que la fenêtre soit déjà sur
+/// le bon écran quand sa taille est fixée. Renvoie la taille réelle obtenue.
+pub fn imposer_geometrie(fenetre: &Window, ecran: &Ecran) -> winit::dpi::PhysicalSize<u32> {
+    fenetre.set_outer_position(winit::dpi::PhysicalPosition::new(
+        ecran.origine.0,
+        ecran.origine.1,
+    ));
+    let _ = fenetre.request_inner_size(winit::dpi::PhysicalSize::new(
+        ecran.taille.0,
+        ecran.taille.1,
+    ));
+    fenetre.inner_size()
 }
 
 /// Options de l'instance graphique propres au système (backend, mode de présentation).

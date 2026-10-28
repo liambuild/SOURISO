@@ -91,6 +91,8 @@ struct Surcouche {
     a_redessiner: bool,
     /// Images réellement présentées sur cet écran, pour le bilan de la sonde.
     images: u64,
+    /// Fois où la taille de la fenêtre a dû être rétablie après un redimensionnement imprévu.
+    rectifications: u8,
 }
 
 /// La fenêtre de réglages quand elle est ouverte.
@@ -267,6 +269,19 @@ impl App {
             fenetres.push(plateforme::creer_surcouche(event_loop, ecran)?);
         }
 
+        for (indice, (ecran, fenetre)) in ecrans.iter().zip(&fenetres).enumerate() {
+            crate::sonde::ecrire(&format!(
+                "Sonde : écran {indice} : taille physique {}x{}, échelle {}, position {:?} ; \
+                 fenêtre après création : taille {:?}, position {:?}",
+                ecran.taille.0,
+                ecran.taille.1,
+                ecran.echelle,
+                ecran.origine,
+                fenetre.inner_size(),
+                fenetre.outer_position().ok()
+            ));
+        }
+
         let cartes = plateforme::cartes_ecrans(&ecrans);
         let (gpu, premiere) = Gpu::nouveau(
             event_loop.owned_display_handle(),
@@ -290,6 +305,7 @@ impl App {
                     curseur: curseur_sur(ecran, &mut self.lectures_curseur),
                     a_redessiner: true,
                     images: 0,
+                    rectifications: 0,
                 }),
                 // L'écran principal est indispensable ; un écran supplémentaire qui échoue
                 // reste simplement sans voile.
@@ -308,8 +324,39 @@ impl App {
                 s.a_redessiner = false;
             }
             s.fenetre.set_visible(true);
+            // L'affichage peut déclencher un changement d'échelle qui redimensionne la fenêtre :
+            // la taille est remise et la surface reconfigurée tout de suite, sans attendre
+            // l'événement de redimensionnement (qui peut ne jamais venir).
+            Self::rectifier(s, "après affichage");
         }
         Ok(())
+    }
+
+    /// Si la fenêtre n'a pas la taille de son écran, la remet et reconfigure la surface. Trois
+    /// essais au plus : un système qui refuse ne doit pas faire boucler les événements.
+    fn rectifier(s: &mut Surcouche, quand: &str) {
+        let voulue = s.ecran.taille;
+        let actuelle = s.fenetre.inner_size();
+        if (actuelle.width, actuelle.height) == voulue {
+            return;
+        }
+        if s.rectifications >= 3 {
+            return;
+        }
+        s.rectifications += 1;
+        let obtenue = plateforme::imposer_geometrie(&s.fenetre, &s.ecran);
+        s.rendu.redimensionner(obtenue.width, obtenue.height);
+        s.a_redessiner = true;
+        crate::sonde::ecrire(&format!(
+            "Sonde : surcouche {quand} : taille {}x{} au lieu de {}x{}, rétablie ({}x{} obtenu, essai {})",
+            actuelle.width,
+            actuelle.height,
+            voulue.0,
+            voulue.1,
+            obtenue.width,
+            obtenue.height,
+            s.rectifications
+        ));
     }
 
     /// Active ou coupe l'effet `ACTIVABLES[indice]`. Les effets se basculent indépendamment.
@@ -828,6 +875,28 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(taille) => {
                 s.rendu.redimensionner(taille.width, taille.height);
                 s.a_redessiner = true;
+                Self::rectifier(s, "après redimensionnement");
+            }
+            // Windows envoie ce changement quand la surcouche passe sur un écran d'une autre échelle
+            // que celui de référence, avec une taille suggérée dérivée de l'autre écran. La
+            // surcouche doit couvrir exactement son écran : la taille physique de celui-ci est
+            // imposée et la surface reconfigurée aussitôt.
+            WindowEvent::ScaleFactorChanged {
+                scale_factor,
+                mut inner_size_writer,
+            } => {
+                let (largeur, hauteur) = s.ecran.taille;
+                let accepte = inner_size_writer
+                    .request_inner_size(winit::dpi::PhysicalSize::new(largeur, hauteur))
+                    .is_ok();
+                s.rendu.redimensionner(largeur, hauteur);
+                s.a_redessiner = true;
+                crate::sonde::ecrire(&format!(
+                    "Sonde : changement d'échelle reçu : {scale_factor} (écran à {}), taille \
+                     imposée {largeur}x{hauteur} {}",
+                    s.ecran.echelle,
+                    if accepte { "acceptée" } else { "refusée" }
+                ));
             }
             WindowEvent::RedrawRequested => {
                 let lectures = &mut self.lectures_curseur;

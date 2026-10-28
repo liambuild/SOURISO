@@ -493,3 +493,23 @@ Fenêtre de réglages avec aperçu en direct, activation des effets enregistrée
 - [ ] W91 : prise en main, S17 (Windows, macOS)
 - [ ] W92 : aucune ressource distante, aucun droit (Windows, macOS)
 - [ ] W93 : contraste à l'œil (Windows, macOS)
+
+## fix/surcouches-ecrans
+
+Sur deux écrans externes d'échelles différentes, la résolution du portable était appliquée à chacun (constat du propriétaire, Windows). Cause probable, non confirmée : une fenêtre créée alors qu'un autre écran fait référence garde sa taille. Correctif : position puis taille imposées après création, taille physique de l'écran imposée à chaque changement d'échelle reçu (Windows envoie sinon une taille dérivée de l'autre écran), taille rétablie et surface reconfigurée juste après l'affichage et à chaque redimensionnement imprévu (trois essais au plus). Rien n'a pu être essayé : tout reste « non testé ».
+
+### Scénarios
+
+| # | Scénario | Attendu | Windows | macOS |
+|---|---|---|---|---|
+| W94 | Trois écrans d'échelles différentes (portable + deux externes) : lancer, lire `souriso-sonde.txt` | Pour chaque écran, une ligne « écran i : taille physique, échelle, position ; fenêtre après création : taille, position ». La taille de la fenêtre égale celle de l'écran. Si une ligne « surcouche … taille … au lieu de … » apparaît, la correction a joué : la noter | non testé | non testé |
+| W95 | Même installation : voile du projecteur sur chaque écran | Le voile couvre tout chaque écran jusqu'aux bords ; le cercle suit le curseur et reste centré sur chacun | non testé | non testé |
+| W96 | Changer l'échelle d'un écran externe (Paramètres > Affichage) puis relancer | Même résultat que W94 et W95 à la nouvelle échelle | non testé | non testé |
+| W97 | Portable à 150 %, externes à 100 % : lancer et lire la sonde | Une ligne « changement d'échelle reçu » par surcouche concernée, avec la taille de l'écran imposée et « acceptée » ; aucune surcouche ne garde la taille du portable | non testé | non testé |
+
+### Cases à cocher (fix/surcouches-ecrans)
+
+- [ ] W94 : lignes de sonde par écran, taille de la fenêtre = taille de l'écran (Windows, macOS)
+- [ ] W95 : voile sur chaque écran (Windows, macOS)
+- [ ] W96 : changement d'échelle (Windows, macOS)
+- [ ] W97 : changements d'échelle imposés à la taille de l'écran (Windows)
