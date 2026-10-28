@@ -132,6 +132,7 @@ fn les_quatre_effets_se_dessinent_dans_une_meme_passe() {
         echelle: 1.0,
         taille: (L as f32, H as f32),
         maintenant: t,
+        exemption: None,
     };
 
     // Sans curseur ni clic : seul le voile du projecteur est là, partout.
@@ -193,6 +194,7 @@ fn changer_de_profil_change_le_dessin_sans_recreer_les_effets() {
         echelle: 1.0,
         taille: (L as f32, H as f32),
         maintenant: Instant::now(),
+        exemption: None,
     };
     let avant = image(&banc, &mut effets, &contexte);
     // Profil par défaut : anneau jaune de rayon 28, rien à 46 px du centre.
@@ -208,4 +210,54 @@ fn changer_de_profil_change_le_dessin_sans_recreer_les_effets() {
     let sur_anneau = pixel(&apres, 128 + 46, 128);
     assert!(sur_anneau[0] > 200 && sur_anneau[1] < 100, "{sur_anneau:?}");
     assert_ne!(sur_anneau, hors_anneau);
+}
+
+#[test]
+fn le_voile_laisse_un_trou_pour_la_fenetre_de_reglages() {
+    let Some(banc) = banc() else {
+        eprintln!("essai ignoré : aucun adaptateur graphique");
+        return;
+    };
+    let sortie = Sortie {
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        non_premultiplie: false,
+    };
+    let mut effets = creer_effets(&banc.device, &sortie, &Config::default());
+    let contexte = |exemption| Contexte {
+        curseur: None,
+        echelle: 1.0,
+        taille: (L as f32, H as f32),
+        maintenant: Instant::now(),
+        exemption,
+    };
+    let plein = image(&banc, &mut effets, &contexte(None));
+    assert!(plein.iter().all(|p| p[3] > 100), "le voile couvre tout");
+
+    // Fenêtre de 80 × 60 px : le voile y est nul, tout autour il est intact, et son bord revient
+    // en quelques pixels.
+    let avec_trou = image(
+        &banc,
+        &mut effets,
+        &contexte(Some([100.0, 100.0, 180.0, 160.0])),
+    );
+    assert_eq!(pixel(&avec_trou, 140, 130)[3], 0, "centre de la fenêtre");
+    assert_eq!(pixel(&avec_trou, 104, 104)[3], 0, "près d'un coin, dedans");
+    assert_eq!(
+        pixel(&avec_trou, 90, 130),
+        pixel(&plein, 90, 130),
+        "à 10 px à gauche"
+    );
+    assert_eq!(
+        pixel(&avec_trou, 140, 175),
+        pixel(&plein, 140, 175),
+        "à 15 px en dessous"
+    );
+    assert_eq!(
+        pixel(&avec_trou, 10, 10),
+        pixel(&plein, 10, 10),
+        "loin du trou"
+    );
+    // Un rectangle vide n'est pas un trou.
+    let vide = image(&banc, &mut effets, &contexte(Some([0.0; 4])));
+    assert_eq!(vide, plein);
 }

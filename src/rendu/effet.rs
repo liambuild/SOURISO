@@ -22,6 +22,10 @@ pub struct Contexte {
     pub taille: (f32, f32),
     /// Instant de l'image : tous les effets d'un écran partagent la même horloge.
     pub maintenant: Instant,
+    /// Rectangle (gauche, haut, droite, bas) en pixels physiques de la surface où le voile du
+    /// projecteur ne s'applique pas : l'emplacement de la fenêtre de réglages, qui doit rester
+    /// lisible. Les autres effets le dessinent normalement. `None` : aucune fenêtre à ménager.
+    pub exemption: Option<[f32; 4]>,
 }
 
 /// Format de la surface : les effets construisent leur pipeline pour elle.

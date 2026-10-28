@@ -21,6 +21,8 @@ struct Uniforme {
     intensite: f32,
     non_premultiplie: f32,
     _remplissage: [f32; 3],
+    /// Rectangle sans voile (gauche, haut, droite, bas), vide s'il n'y en a pas.
+    trou: [f32; 4],
 }
 
 pub struct Projecteur {
@@ -115,6 +117,7 @@ impl Projecteur {
             intensite: r.intensite,
             non_premultiplie: if self.non_premultiplie { 1.0 } else { 0.0 },
             _remplissage: [0.0; 3],
+            trou: contexte.exemption.unwrap_or([0.0; 4]),
         }
     }
 }
@@ -159,7 +162,35 @@ mod tests {
     }
 
     #[test]
-    fn la_structure_envoyee_au_gpu_fait_48_octets() {
-        assert_eq!(std::mem::size_of::<Uniforme>(), 48);
+    fn la_structure_envoyee_au_gpu_fait_64_octets() {
+        assert_eq!(std::mem::size_of::<Uniforme>(), 64);
+    }
+
+    fn contexte(exemption: Option<[f32; 4]>) -> Contexte {
+        Contexte {
+            curseur: None,
+            echelle: 1.0,
+            taille: (1920.0, 1080.0),
+            maintenant: std::time::Instant::now(),
+            exemption,
+        }
+    }
+
+    #[test]
+    fn la_zone_de_la_fenetre_de_reglages_est_transmise_au_shader() {
+        let reglages = config::Projecteur::default();
+        let pipeline_inutile = |e| Uniforme {
+            curseur: [LOIN, LOIN],
+            rayon: reglages.rayon,
+            adoucissement: reglages.adoucissement,
+            couleur: reglages.couleur,
+            intensite: reglages.intensite,
+            non_premultiplie: 0.0,
+            _remplissage: [0.0; 3],
+            trou: contexte(e).exemption.unwrap_or([0.0; 4]),
+        };
+        assert_eq!(pipeline_inutile(None).trou, [0.0; 4]);
+        let zone = [100.0, 50.0, 900.0, 650.0];
+        assert_eq!(pipeline_inutile(Some(zone)).trou, zone);
     }
 }
