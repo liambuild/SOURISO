@@ -877,6 +877,27 @@ impl ApplicationHandler for App {
                 s.a_redessiner = true;
                 Self::rectifier(s, "après redimensionnement");
             }
+            // Windows envoie ce changement quand la surcouche passe sur un écran d'une autre échelle
+            // que celui de référence, avec une taille suggérée dérivée de l'autre écran. La
+            // surcouche doit couvrir exactement son écran : la taille physique de celui-ci est
+            // imposée et la surface reconfigurée aussitôt.
+            WindowEvent::ScaleFactorChanged {
+                scale_factor,
+                mut inner_size_writer,
+            } => {
+                let (largeur, hauteur) = s.ecran.taille;
+                let accepte = inner_size_writer
+                    .request_inner_size(winit::dpi::PhysicalSize::new(largeur, hauteur))
+                    .is_ok();
+                s.rendu.redimensionner(largeur, hauteur);
+                s.a_redessiner = true;
+                crate::sonde::ecrire(&format!(
+                    "Sonde : changement d'échelle reçu : {scale_factor} (écran à {}), taille \
+                     imposée {largeur}x{hauteur} {}",
+                    s.ecran.echelle,
+                    if accepte { "acceptée" } else { "refusée" }
+                ));
+            }
             WindowEvent::RedrawRequested => {
                 let lectures = &mut self.lectures_curseur;
                 let curseur = &mut s.curseur;
