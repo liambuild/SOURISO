@@ -250,9 +250,9 @@
     const racine = $("#page");
     racine.setAttribute("aria-labelledby", `onglet-${ui.page}`);
     const effet = etat.effets.find((e) => e.id === ui.page);
-    if (effet) racine.replaceChildren(...pageEffet(effet));
-    else if (ui.page === "profils") racine.replaceChildren(...pageProfils());
-    else racine.replaceChildren(...pageCarte());
+    // Un élément absent (null) deviendrait le texte « null » : on ne garde que les nœuds.
+    const page = effet ? pageEffet(effet) : ui.page === "profils" ? pageProfils() : pageCarte();
+    racine.replaceChildren(...page.filter((e) => e != null && e !== false));
   }
 
   /* --- Page d'un effet ---------------------------------------------------------------------- */

@@ -105,11 +105,15 @@ const attendre = (ms = 30) => new Promise((r) => setTimeout(r, ms));
   // Carte graphique
   $$("[role=tab]")[6].click(); await attendre();
   ok($$("#page input[type=radio]").length === 3 && !$("#page input[type=radio]").disabled, "3 choix de carte, actifs");
+  ok(!$("#page").textContent.includes("null") && !$("#page").textContent.includes("undefined"), "aucun « null » affiché sans variable d'environnement");
+  ok($$("#page .note").length === 1, "sans variable : une seule note, celle du prochain lancement");
   $$("#page input[type=radio]")[1].click(); await attendre();
   ok(dernier("adaptateur").valeur === "econome", "adaptateur économe envoyé");
   ok($("#statut").textContent.includes("prochain lancement"), "mention « au prochain lancement »");
   livrer({ ...etat0, adaptateur_impose: "WGPU_POWER_PREF" }); await attendre();
   ok($$("#page input[type=radio]").every((r) => r.disabled) && $("#page .note").textContent.includes("WGPU_POWER_PREF"), "grisé si une variable d'environnement l'impose");
+  ok($("#page .note").textContent === "Ce choix est imposé par la variable d'environnement WGPU_POWER_PREF : le réglage ci-dessous est sans effet tant qu'elle est définie.", "ligne attendue quand une variable impose la carte");
+  ok(!$("#page").textContent.includes("null"), "aucun « null » affiché quand une variable impose la carte");
 
   // Profils
   $$("[role=tab]")[5].click(); await attendre();
