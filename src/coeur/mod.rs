@@ -5,6 +5,7 @@ pub mod clic;
 pub mod config;
 pub mod ondulation;
 pub mod profil;
+pub mod reglages;
 pub mod son;
 pub mod stockage;
 pub mod trainee;

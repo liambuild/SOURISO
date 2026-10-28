@@ -4,13 +4,17 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::activation::ActifsProfil;
 use super::config::{raccourci, Adaptateur, Anneau, Config, Effets, Ondulation, Projecteur};
 use super::config::{Raccourci, SonClic, Trainee};
 use super::son::Son;
 
 /// Version du format du fichier des profils. À augmenter, avec une migration, à chaque changement
-/// incompatible.
-pub const VERSION_FORMAT: u32 = 1;
+/// incompatible. La 2 ajoute l'activation de chaque effet dans le profil (`actifs`).
+pub const VERSION_FORMAT: u32 = 2;
+
+/// Plus ancienne version relue : un fichier de cette version est migré (tous les effets actifs).
+pub const VERSION_MINIMALE: u32 = 1;
 
 /// Longueur maximale d'un nom de profil, en caractères.
 pub const LONGUEUR_NOM_MAX: usize = 40;
@@ -26,6 +30,9 @@ pub struct Profil {
     /// Passe à ce profil et active les effets s'ils étaient coupés. `None` : pas de raccourci.
     pub raccourci: Option<Raccourci>,
     pub effets: Effets,
+    /// Effets que le profil active : appliqués quand on passe à lui, modifiés par l'interrupteur
+    /// de la fenêtre de réglages (pas par les raccourcis d'effet, qui ne durent que la session).
+    pub actifs: ActifsProfil,
 }
 
 impl Default for Profil {
@@ -34,6 +41,7 @@ impl Default for Profil {
             nom: NOM_DEFAUT.into(),
             raccourci: Some(raccourci('D')),
             effets: Effets::default(),
+            actifs: ActifsProfil::default(),
         }
     }
 }
@@ -77,6 +85,7 @@ impl Profil {
                     choix: Son::Cloche,
                 },
             },
+            actifs: ActifsProfil::default(),
         }
     }
 
@@ -118,6 +127,7 @@ impl Profil {
                     choix: Son::Bulle,
                 },
             },
+            actifs: ActifsProfil::default(),
         }
     }
 }
@@ -154,9 +164,10 @@ impl Default for Profils {
     }
 }
 
-/// Une lettre de A à Z : les seules touches que la plateforme sait enregistrer.
+/// Une lettre de A à Z, avec Ctrl ou Alt : les seules combinaisons que la plateforme sait
+/// enregistrer, et qui ne prennent pas à une application une lettre qu'on tape.
 fn touche_valide(r: &Raccourci) -> bool {
-    r.touche.is_ascii_alphabetic()
+    r.touche.is_ascii_alphabetic() && (r.ctrl || r.alt)
 }
 
 /// Même combinaison, quelle que soit la casse de la lettre.
@@ -243,9 +254,8 @@ impl Profils {
     }
 }
 
-/// Gestion des profils par l'utilisateur : créer, dupliquer, renommer, supprimer, fixer un
-/// raccourci. Pas encore appelée par l'application, elle servira à la fenêtre de réglages.
-#[allow(dead_code)]
+/// Gestion des profils par l'utilisateur, depuis la fenêtre de réglages : créer, dupliquer,
+/// renommer, supprimer, fixer un raccourci.
 impl Profils {
     /// Nom prêt à servir pour le profil `sauf` (ou un nouveau si `None`) : espaces retirés, ni
     /// vide, ni trop long, ni déjà pris sans tenir compte de la casse.
@@ -285,6 +295,7 @@ impl Profils {
             nom,
             raccourci: None,
             effets: Effets::default(),
+            actifs: ActifsProfil::default(),
         });
         Ok(self.profils.len() - 1)
     }
@@ -313,6 +324,7 @@ impl Profils {
             nom,
             raccourci: None,
             effets: self.profils[indice].effets,
+            actifs: self.profils[indice].actifs,
         });
         Ok(self.profils.len() - 1)
     }
@@ -365,6 +377,23 @@ impl Profils {
             .map(|(_, p)| format!("le profil « {} »", p.nom))
     }
 
+    /// Fixe (ou retire) le raccourci qui passe au profil suivant. Mêmes règles que pour un profil.
+    pub fn definir_raccourci_suivant(&mut self, nouveau: Option<Raccourci>) -> Result<(), String> {
+        let ancien = self.raccourci_suivant.take();
+        let verdict = match &nouveau {
+            Some(r) if !touche_valide(r) => {
+                Err("une lettre de A à Z avec Ctrl ou Alt est nécessaire".to_string())
+            }
+            Some(r) => match self.detenteur(r, None) {
+                Some(qui) => Err(format!("indisponible : déjà utilisé par {qui}")),
+                None => Ok(()),
+            },
+            None => Ok(()),
+        };
+        self.raccourci_suivant = if verdict.is_ok() { nouveau } else { ancien };
+        verdict
+    }
+
     /// Fixe (ou retire) le raccourci d'un profil. Refuse une touche non prise en charge et une
     /// combinaison déjà détenue par ce programme ; un refus du système est un autre cas, traité à
     /// l'enregistrement.
@@ -376,10 +405,10 @@ impl Profils {
         self.verifier_indice(indice)?;
         if let Some(r) = &nouveau {
             if !touche_valide(r) {
-                return Err(format!("touche « {} » non prise en charge", r.touche));
+                return Err("une lettre de A à Z avec Ctrl ou Alt est nécessaire".into());
             }
             if let Some(qui) = self.detenteur(r, Some(indice)) {
-                return Err(format!("combinaison déjà utilisée par {qui}"));
+                return Err(format!("indisponible : déjà utilisé par {qui}"));
             }
         }
         self.profils[indice].raccourci = nouveau;
@@ -545,6 +574,57 @@ mod tests {
         );
         assert_eq!(p.profils[0].effets.anneau.opacite, 1.0);
         assert_eq!(corrections.len(), 5, "{corrections:?}");
+    }
+
+    #[test]
+    fn un_raccourci_sans_ctrl_ni_alt_est_refuse() {
+        let mut p = trois();
+        let nu = Raccourci {
+            ctrl: false,
+            alt: false,
+            maj: true,
+            touche: 'K',
+        };
+        assert!(p.definir_raccourci(2, Some(nu)).is_err());
+        assert!(p.definir_raccourci_suivant(Some(nu)).is_err());
+        let alt = Raccourci { alt: true, ..nu };
+        p.definir_raccourci(2, Some(alt)).unwrap();
+        p.profils[1].raccourci = Some(nu);
+        p.normaliser();
+        assert_eq!(p.profils[1].raccourci, None, "retiré à la lecture");
+    }
+
+    #[test]
+    fn le_raccourci_du_profil_suivant_se_change_avec_les_memes_regles() {
+        let mut p = trois();
+        let err = p
+            .definir_raccourci_suivant(Some(raccourci('E')))
+            .unwrap_err();
+        assert!(err.contains("indisponible : déjà utilisé par"), "{err}");
+        assert_eq!(
+            p.raccourci_suivant,
+            Some(raccourci('N')),
+            "inchangé après refus"
+        );
+        p.definir_raccourci_suivant(Some(raccourci('N'))).unwrap();
+        p.definir_raccourci_suivant(Some(raccourci('K'))).unwrap();
+        assert_eq!(p.raccourci_suivant, Some(raccourci('K')));
+        p.definir_raccourci_suivant(None).unwrap();
+        assert_eq!(p.raccourci_suivant, None);
+    }
+
+    #[test]
+    fn l_activation_des_effets_est_dans_le_profil_et_se_duplique() {
+        let mut p = trois();
+        assert!(p
+            .profils
+            .iter()
+            .all(|x| x.actifs == ActifsProfil::default()));
+        p.profils[2].actifs.son = false;
+        let copie = p.dupliquer(2).unwrap();
+        assert!(!p.profils[copie].actifs.son);
+        let neuf = p.creer("Neuf").unwrap();
+        assert!(p.profils[neuf].actifs.son, "un profil neuf active tout");
     }
 
     #[test]
