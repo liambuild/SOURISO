@@ -1,6 +1,9 @@
 # Rust
 /target
 
+# Schémas générés par la compilation du crate des réglages (Tauri)
+/reglages/gen
+
 # Systèmes
 .DS_Store
 Thumbs.db

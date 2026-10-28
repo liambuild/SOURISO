@@ -21,6 +21,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
     "Win32_Media_Audio",
+    "Win32_System_Registry",
     "Win32_System_Threading",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",
@@ -35,3 +36,10 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# Deux exécutables livrés côte à côte : `souriso` (surcouche, sans moteur web) et
+# `souriso-reglages` (fenêtre de réglages, Tauri 2). Les commandes de vérification de CLAUDE.md
+# ne visent que le premier (compilable sous Linux) ; la CI vérifie les deux (`--workspace`).
+[workspace]
+members = [".", "reglages"]
+default-members = ["."]
