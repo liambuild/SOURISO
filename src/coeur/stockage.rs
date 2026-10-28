@@ -182,6 +182,36 @@ mod tests {
     }
 
     #[test]
+    fn chaque_choix_de_carte_est_ecrit_puis_relu_tel_quel() {
+        for (choix, ecrit) in [
+            (Adaptateur::Automatique, "automatique"),
+            (Adaptateur::Econome, "econome"),
+            (Adaptateur::Performant, "performant"),
+        ] {
+            let d = Dossier::new(&format!("carte-{ecrit}"));
+            // On part d'un autre choix, pour qu'une relecture qui retomberait sur une valeur
+            // fixe ou sur la valeur par défaut soit détectée.
+            let mut p = Profils {
+                adaptateur: if choix == Adaptateur::Performant {
+                    Adaptateur::Econome
+                } else {
+                    Adaptateur::Performant
+                },
+                ..Profils::default()
+            };
+            enregistrer(&d.fichier(), &p).unwrap();
+            p.adaptateur = choix;
+            enregistrer(&d.fichier(), &p).unwrap();
+            let texte = std::fs::read_to_string(d.fichier()).unwrap();
+            assert!(
+                texte.contains(&format!("\"adaptateur\": \"{ecrit}\"")),
+                "le fichier doit porter le choix {ecrit} : {texte}"
+            );
+            assert_eq!(charger(&d.fichier()).profils.adaptateur, choix);
+        }
+    }
+
+    #[test]
     fn enregistrer_cree_le_dossier_et_remplace_le_fichier() {
         let d = Dossier::new("cree");
         let chemin = d.0.join("sous").join(NOM_FICHIER);
