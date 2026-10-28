@@ -1,5 +1,7 @@
 //! Icône factice : pas de zone de notification hors Windows et macOS.
 
+use super::EvenementsIcone;
+
 pub struct Icone;
 
 impl Icone {
@@ -7,7 +9,7 @@ impl Icone {
         Ok(Icone)
     }
 
-    pub fn quitter_demande(&self) -> bool {
-        false
+    pub fn evenements(&self) -> EvenementsIcone {
+        EvenementsIcone::default()
     }
 }

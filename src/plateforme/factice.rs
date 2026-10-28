@@ -72,6 +72,19 @@ pub fn dossier_donnees() -> Option<std::path::PathBuf> {
     Some(base.join("SOURISO"))
 }
 
+/// Pas de moteur web à vérifier hors des systèmes pris en charge.
+pub fn moteur_web_disponible() -> bool {
+    true
+}
+
+/// Hors des systèmes pris en charge, le message va seulement sur la sortie d'erreur.
+pub fn afficher_boite(texte: &str) {
+    eprintln!("{texte}");
+}
+
+/// Rien à régler pour lancer le processus des réglages.
+pub fn preparer_enfant(_commande: &mut std::process::Command) {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

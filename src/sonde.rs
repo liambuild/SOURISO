@@ -109,6 +109,8 @@ pub struct Compteurs {
     pub profil_actif: String,
     /// Changements de profil depuis le lancement (passer au profil déjà actif n'en compte pas).
     pub changements_profil: u64,
+    /// Ouvertures de la fenêtre de réglages depuis le lancement.
+    pub ouvertures_reglages: u64,
 }
 
 /// Taux de rafraîchissement d'un écran pour la sonde, ou « inconnu » si le système ne le donne pas.
@@ -146,7 +148,7 @@ pub fn bilan(
          images par écran {:?}, réveils de la boucle {}, lectures du curseur {}, \
          échecs d'acquisition {}, reconfigurations de surface {}, \
          clics gauche {}, clics droit {}, sons joués {}, \
-         profil actif « {} », changements de profil {}",
+         profil actif « {} », changements de profil {}, ouvertures des réglages {}",
         compteurs.images_par_ecran,
         compteurs.reveils,
         compteurs.lectures_curseur,
@@ -156,7 +158,8 @@ pub fn bilan(
         compteurs.clics_droit,
         compteurs.sons_joues,
         compteurs.profil_actif,
-        compteurs.changements_profil
+        compteurs.changements_profil,
+        compteurs.ouvertures_reglages
     )
 }
 
@@ -177,6 +180,7 @@ mod tests {
             sons_joues: 15,
             profil_actif: "Présentation".into(),
             changements_profil: 2,
+            ouvertures_reglages: 1,
         };
         let ligne = bilan(
             Duration::from_secs(60),
@@ -194,7 +198,8 @@ mod tests {
              réveils de la boucle 7500, lectures du curseur 22500, \
              échecs d'acquisition 3, reconfigurations de surface 1, \
              clics gauche 12, clics droit 3, sons joués 15, \
-             profil actif « Présentation », changements de profil 2"
+             profil actif « Présentation », changements de profil 2, \
+             ouvertures des réglages 1"
         );
     }
 

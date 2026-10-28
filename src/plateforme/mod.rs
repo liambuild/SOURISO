@@ -1,7 +1,8 @@
 //! Couche plateforme : seul endroit qui connaît le système.
 //! Le contrat est : boucle d'événements, écrans, surcouche passe-clics, position du curseur,
 //! icône de barre de menus ou de zone de notification, raccourcis globaux, état des boutons de la
-//! souris, lecture d'un son, temps processeur.
+//! souris, lecture d'un son, temps processeur, lancement de la fenêtre de réglages (moteur web
+//! du système compris).
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -39,6 +40,13 @@ use icone_factice as icone;
 
 pub use icone::Icone;
 
+/// Ce que l'utilisateur a demandé par l'icône depuis la dernière lecture.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct EvenementsIcone {
+    pub quitter: bool,
+    pub reglages: bool,
+}
+
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 mod raccourci_systeme;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -50,6 +58,9 @@ mod raccourci_factice;
 use raccourci_factice as raccourci;
 
 pub use raccourci::RaccourciGlobal;
+
+mod reglages_processus;
+pub use reglages_processus::FenetreReglages;
 
 #[cfg(not(target_os = "windows"))]
 mod rusage;
@@ -140,7 +151,8 @@ pub fn dossier_donnees() -> Option<std::path::PathBuf> {
     systeme::dossier_donnees()
 }
 
-/// Crée l'icône de barre de menus ou de zone de notification, avec une entrée « Quitter ».
+/// Crée l'icône de barre de menus ou de zone de notification, avec les entrées « Réglages… » et
+/// « Quitter ».
 pub fn creer_icone() -> Result<Icone, String> {
     Icone::creer()
 }
@@ -167,4 +179,11 @@ pub fn temps_processeur() -> Option<TempsProcesseur> {
 /// est signalé par `RaccourciGlobal::refus` et n'empêche pas les autres.
 pub fn creer_raccourcis(raccourcis: &[Raccourci]) -> Result<RaccourciGlobal, String> {
     RaccourciGlobal::creer(raccourcis)
+}
+
+/// Rend au système toutes les combinaisons de raccourcis globaux, le temps qu'une combinaison soit
+/// saisie dans la fenêtre de réglages : sans cela, le système la détournerait vers ce processus
+/// au lieu de la page. Les rétablir, c'est appeler à nouveau `creer_raccourcis`.
+pub fn suspendre_raccourcis(raccourci: &mut Option<RaccourciGlobal>) {
+    *raccourci = None;
 }

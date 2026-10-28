@@ -24,7 +24,7 @@ fn main() -> ExitCode {
         sonde::ecrire(&format!("SOURISO : {e}"));
         return ExitCode::from(2);
     }
-    match app.echec {
+    match &app.echec {
         Some(e) => {
             sonde::ecrire(&format!("SOURISO : {e}"));
             ExitCode::from(2)

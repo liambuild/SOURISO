@@ -3,16 +3,22 @@
 use tray_icon::menu::{Menu, MenuEvent, MenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
+use super::EvenementsIcone;
+
 pub struct Icone {
     _icone: TrayIcon,
     quitter_id: tray_icon::menu::MenuId,
+    reglages_id: tray_icon::menu::MenuId,
 }
 
 impl Icone {
     pub fn creer() -> Result<Self, String> {
+        let reglages = MenuItem::new("Réglages…", true, None);
+        let reglages_id = reglages.id().clone();
         let quitter = MenuItem::new("Quitter SOURISO", true, None);
         let quitter_id = quitter.id().clone();
         let menu = Menu::new();
+        menu.append(&reglages).map_err(|e| e.to_string())?;
         menu.append(&quitter).map_err(|e| e.to_string())?;
         let icone = TrayIconBuilder::new()
             .with_tooltip("SOURISO")
@@ -23,16 +29,18 @@ impl Icone {
         Ok(Icone {
             _icone: icone,
             quitter_id,
+            reglages_id,
         })
     }
 
-    /// Vrai dès que l'entrée « Quitter » a été choisie.
-    pub fn quitter_demande(&self) -> bool {
-        let mut demande = false;
+    /// Les entrées de menu choisies depuis le dernier appel.
+    pub fn evenements(&self) -> EvenementsIcone {
+        let mut choix = EvenementsIcone::default();
         while let Ok(evenement) = MenuEvent::receiver().try_recv() {
-            demande |= evenement.id == self.quitter_id;
+            choix.quitter |= evenement.id == self.quitter_id;
+            choix.reglages |= evenement.id == self.reglages_id;
         }
-        demande
+        choix
     }
 }
 
