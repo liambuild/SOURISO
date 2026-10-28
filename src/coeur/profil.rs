@@ -440,6 +440,8 @@ mod tests {
         let noms: Vec<_> = p.profils.iter().map(|x| x.nom.as_str()).collect();
         assert_eq!(noms, ["Par défaut", "Présentation", "Enregistrement"]);
         assert_eq!((p.actif, p.version), (0, VERSION_FORMAT));
+        // Ni « économe » ni « performant » : la carte qui porte les écrans décide (ARCHITECTURE, 4.2).
+        assert_eq!(p.adaptateur, Adaptateur::Automatique);
         // Déjà cohérent : la normalisation ne corrige rien.
         assert_eq!(p.normaliser(), Vec::<String>::new());
         assert_eq!(p, trois());

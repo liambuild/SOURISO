@@ -91,6 +91,8 @@ fn ajouter(
 pub struct Compteurs {
     /// Passages de la boucle d'événements (un par réveil).
     pub reveils: u64,
+    /// Dont réveils survenus pendant que la boucle était au repos (cadence espacée).
+    pub reveils_repos: u64,
     /// Appels à la lecture de la position du curseur, tous écrans confondus.
     pub lectures_curseur: u64,
     /// Images réellement présentées, par écran (dans l'ordre des écrans retenus).
@@ -145,12 +147,13 @@ pub fn bilan(
     format!(
         "Bilan : durée d'exécution {secondes:.3} s, temps processeur {processeur}, \
          images dessinées {images} ({par_seconde:.2} images/s en moyenne), \
-         images par écran {:?}, réveils de la boucle {}, lectures du curseur {}, \
+         images par écran {:?}, réveils de la boucle {} (dont au repos {}), lectures du curseur {}, \
          échecs d'acquisition {}, reconfigurations de surface {}, \
          clics gauche {}, clics droit {}, sons joués {}, \
          profil actif « {} », changements de profil {}, ouvertures des réglages {}",
         compteurs.images_par_ecran,
         compteurs.reveils,
+        compteurs.reveils_repos,
         compteurs.lectures_curseur,
         compteurs.echecs_acquisition,
         compteurs.reconfigurations,
@@ -171,6 +174,7 @@ mod tests {
     fn le_bilan_donne_duree_processeur_cadence_et_compteurs() {
         let compteurs = Compteurs {
             reveils: 7500,
+            reveils_repos: 5000,
             lectures_curseur: 22500,
             images_par_ecran: vec![800, 400, 0],
             echecs_acquisition: 3,
@@ -195,7 +199,7 @@ mod tests {
             "Bilan : durée d'exécution 60.000 s, temps processeur 1.500 s \
              (noyau 0.500 s, utilisateur 1.000 s), images dessinées 1200 \
              (20.00 images/s en moyenne), images par écran [800, 400, 0], \
-             réveils de la boucle 7500, lectures du curseur 22500, \
+             réveils de la boucle 7500 (dont au repos 5000), lectures du curseur 22500, \
              échecs d'acquisition 3, reconfigurations de surface 1, \
              clics gauche 12, clics droit 3, sons joués 15, \
              profil actif « Présentation », changements de profil 2, \

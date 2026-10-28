@@ -14,6 +14,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::window::{Window, WindowId};
 
 use crate::coeur::activation::{Activations, ANNEAU, ONDULATION, PROJECTEUR, SON, TRAINEE};
+use crate::coeur::cadence::{image_necessaire, Cadence};
 use crate::coeur::clic::{Bouton, Detecteur};
 use crate::coeur::config::SonClic;
 use crate::coeur::profil::Profils;
@@ -24,9 +25,6 @@ use crate::coeur::{Config, Ecran, Point, Raccourci};
 use crate::plateforme::{self, FenetreReglages, Icone, RaccourciGlobal};
 use crate::rendu::{Gpu, Rendu};
 use crate::sonde::{self, Compteurs};
-
-/// Cadence d'interrogation du curseur (environ 120 Hz). Le dessin n'a lieu que si l'image change.
-const PERIODE: Duration = Duration::from_millis(8);
 
 /// Intervalle entre deux écritures du bilan en cours dans la sonde.
 const PERIODE_BILAN: Duration = Duration::from_secs(10);
@@ -139,7 +137,12 @@ pub struct App {
     ouvertures_reglages: u64,
     /// Instant à partir duquel le fichier des profils doit être réécrit (réglages en attente).
     enregistrement_prevu: Option<Instant>,
+    /// Cadence d'interrogation du curseur : normale en activité, espacée au repos. Le dessin n'a
+    /// lieu que si l'image change.
+    cadence: Cadence,
     reveils: u64,
+    /// Réveils survenus pendant que la boucle était au repos.
+    reveils_repos: u64,
     lectures_curseur: u64,
     clics_gauche: u64,
     clics_droit: u64,
@@ -199,7 +202,9 @@ impl App {
             reglages: None,
             ouvertures_reglages: 0,
             enregistrement_prevu: None,
+            cadence: Cadence::new(debut),
             reveils: 0,
+            reveils_repos: 0,
             lectures_curseur: 0,
             clics_gauche: 0,
             clics_droit: 0,
@@ -244,6 +249,7 @@ impl App {
             .collect();
         let compteurs = Compteurs {
             reveils: self.reveils,
+            reveils_repos: self.reveils_repos,
             lectures_curseur: self.lectures_curseur,
             images_par_ecran: self.surcouches.iter().map(|s| s.images).collect(),
             echecs_acquisition: statistiques.iter().map(|s| s.echecs_acquisition).sum(),
@@ -828,7 +834,8 @@ impl App {
 
     /// Lit les boutons une fois, puis transmet chaque appui neuf à l'écran où se trouve le curseur
     /// et au son. Un appui compté l'est même si son effet est coupé : la sonde vérifie la détection.
-    fn traiter_clics(&mut self) {
+    /// Renvoie vrai si un bouton vient d'être pressé.
+    fn traiter_clics(&mut self) -> bool {
         let appuis = self.detecteur.appuis(plateforme::boutons());
         for (present, bouton) in [
             (appuis.gauche, Bouton::Gauche),
@@ -852,6 +859,7 @@ impl App {
                 self.sons_joues += 1;
             }
         }
+        appuis.gauche || appuis.droit
     }
 }
 
@@ -918,7 +926,14 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let maintenant = Instant::now();
         self.reveils += 1;
+        if self.cadence.au_repos(maintenant) {
+            self.reveils_repos += 1;
+        }
+        // Vrai dès qu'un signe d'activité justifie la cadence normale ; le repos ne vient qu'après
+        // un calme complet.
+        let mut actif = false;
         let choix = self
             .icone
             .as_ref()
@@ -930,13 +945,15 @@ impl ApplicationHandler for App {
         }
         if choix.reglages {
             self.ouvrir_reglages();
+            actif = true;
         }
-        for indice in self
+        let demandes = self
             .raccourci
             .as_ref()
             .map(RaccourciGlobal::activations_demandees)
-            .unwrap_or_default()
-        {
+            .unwrap_or_default();
+        actif |= !demandes.is_empty();
+        for indice in demandes {
             match self.cibles.get(indice).copied() {
                 Some(Cible::Effet(i)) => self.basculer(i),
                 Some(Cible::Suivant) => {
@@ -952,6 +969,9 @@ impl ApplicationHandler for App {
         if self.reglages.is_some() {
             self.traiter_reglages();
         }
+        // La fenêtre de réglages parle par sa sortie standard, lue à chaque réveil : tant qu'elle
+        // est ouverte ou qu'un enregistrement est en attente, la cadence reste normale.
+        actif |= self.reglages.is_some() || self.enregistrement_prevu.is_some();
         if self
             .enregistrement_prevu
             .is_some_and(|t| t <= Instant::now())
@@ -970,15 +990,23 @@ impl ApplicationHandler for App {
             }
         }
         // Après la lecture des curseurs : un clic va à l'écran où le curseur est maintenant.
-        self.traiter_clics();
+        actif |= self.traiter_clics();
         for s in &mut self.surcouches {
             // Une animation en cours (ondulation, fondu de la traînée) demande des images, et
-            // seulement elle : sans animation ni changement, aucune image n'est demandée.
-            if s.a_redessiner || s.rendu.animation_en_cours(&self.activations) {
+            // seulement elle : sans animation ni changement, aucune image n'est demandée, et un
+            // écran qui ne porte pas le curseur n'en reçoit que pour s'effacer.
+            let animation = s.rendu.animation_en_cours(&self.activations);
+            if image_necessaire(s.a_redessiner, animation) {
                 s.fenetre.request_redraw();
+                actif = true;
             }
         }
-        event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + PERIODE));
+        if actif {
+            self.cadence.noter_activite(maintenant);
+        }
+        event_loop.set_control_flow(ControlFlow::WaitUntil(
+            maintenant + self.cadence.periode(maintenant),
+        ));
     }
 }
 
