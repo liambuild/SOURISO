@@ -164,7 +164,7 @@ Contrat de la couche plateforme :
 
 Règles de la frontière, vérifiables mécaniquement :
 
-1. Aucun `cfg(target_os)`, aucune API système, aucun `unsafe` en dehors du dossier de la couche plateforme. Contrôle par recherche textuelle (`scripts/verifier-frontiere.sh`), qui porte aussi sur le crate des réglages (`reglages/`) : lui n'a aucune exception, pas même un `cfg`.
+1. Aucun `cfg(target_os)`, aucune API système, aucun `unsafe` en dehors du dossier de la couche plateforme. Contrôle par recherche textuelle (`scripts/verifier-frontiere.sh`), qui porte aussi sur le crate des réglages (`reglages/`) : lui n'a aucune exception, pas même un `cfg`. **Seule exception connue : `#![windows_subsystem = "windows"]` en tête de `src/main.rs`**, qui supprime la fenêtre de terminal sous Windows (sans elle, `souriso` ouvre un terminal qu'on ne peut pas fermer sans l'arrêter). Un attribut de racine de crate ne peut pas vivre dans la couche plateforme ; il n'a aucun effet hors de Windows, et le script ne le signale pas (il ne cherche ni `cfg` ni API). Conséquence : plus de sortie sur la console ; la sonde reste dans `souriso-sonde.txt`.
 2. L'adaptateur factice rejoue des événements scriptés. Il permet de développer et tester le cœur et l'interface sous Linux, ce qui répond à la contrainte de terrain.
 3. Chaque fonction d'un adaptateur a une ligne dans `docs/RECETTE.md`, par système, avec « testé » ou « non testé ».
 4. Les conversions de coordonnées et d'échelle sont faites dans l'adaptateur, et nulle part ailleurs.
