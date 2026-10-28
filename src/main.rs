@@ -1,3 +1,10 @@
+// Sous Windows, un programme « console » ouvre une fenêtre de terminal qu'on ne peut pas fermer sans
+// l'arrêter. SOURISO n'en a pas besoin : la sonde écrit dans `souriso-sonde.txt`. L'attribut est
+// sans effet hors de Windows. C'est la seule ligne dépendante d'un système hors de `src/plateforme`
+// (un attribut de racine de crate ne peut pas vivre ailleurs) : exception justifiée dans
+// `docs/ARCHITECTURE.md`, section 4.1.
+#![windows_subsystem = "windows"]
+
 mod app;
 mod coeur;
 mod plateforme;

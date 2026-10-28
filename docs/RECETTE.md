@@ -513,3 +513,17 @@ Sur deux écrans externes d'échelles différentes, la résolution du portable �
 - [ ] W95 : voile sur chaque écran (Windows, macOS)
 - [ ] W96 : changement d'échelle (Windows, macOS)
 - [ ] W97 : changements d'échelle imposés à la taille de l'écran (Windows)
+
+## fix/sans-console
+
+`souriso` ouvrait une fenêtre de terminal, indispensable à son fonctionnement (la fermer arrêtait SOURISO). Il est maintenant un programme sans console sous Windows. Non testé.
+
+| # | Scénario | Attendu | Windows | macOS |
+|---|---|---|---|---|
+| W98 | Double-clic sur `souriso.exe` | Aucune fenêtre PowerShell ni terminal, même brève ; l'icône apparaît en zone de notification ; les effets et « Réglages… » fonctionnent. `souriso-sonde.txt` est écrit à côté de l'exécutable | non testé | sans objet |
+| W99 | Lancer depuis un terminal | Le terminal rend la main aussitôt, SOURISO continue ; rien n'est écrit dans le terminal (lire `souriso-sonde.txt`) | non testé | sans objet |
+| W100 | Quitter par l'icône | Le processus disparaît du Gestionnaire des tâches | non testé | sans objet |
+
+- [ ] W98 : aucune fenêtre de terminal (Windows)
+- [ ] W99 : lancement depuis un terminal (Windows)
+- [ ] W100 : fermeture par l'icône (Windows)
