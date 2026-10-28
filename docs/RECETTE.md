@@ -287,7 +287,7 @@ Quatre effets s'ajoutent au projecteur : anneau, traînée, ondulation au clic (
 
 **Limites assumées, à constater en recette.**
 
-- Les clics sont lus par interrogation des boutons toutes les 8 ms : **un appui plus court que cette période peut être manqué** (ni ondulation ni son).
+- Les clics sont lus par interrogation des boutons toutes les 8 ms (16 ms au repos depuis `perf/repos-et-limites`) : **un appui plus court que cette période peut être manqué** (ni ondulation ni son).
 - Un son qui arrive pendant un autre **coupe le précédent**.
 - **La latence entre le clic et le son est inconnue** : elle dépend du système, du pilote audio et du premier appel (initialisation du lecteur). À mesurer (W46).
 - Un clic maintenu ne donne qu'une ondulation et qu'un son (front d'appui).
@@ -313,7 +313,7 @@ Quatre effets s'ajoutent au projecteur : anneau, traînée, ondulation au clic (
 | W41 | Clic maintenu 2 s | Une seule ondulation et un seul son au moment de l'appui. Dans le bilan : clics gauche + 1, sons joués + 1 | non testé | non testé |
 | W42 | Clics rapides répétés : 20 clics en 3 s, puis 10 clics en 1 s, gauche et droit mélangés | Pas de blocage ni de retard cumulé ; au plus 8 ondulations visibles à la fois ; le son se coupe et se relance sans crépitement gênant (limite acceptée : un son coupe le précédent). Comparer le nombre de clics faits au bilan : noter les clics manqués | non testé | non testé |
 | W43 | Boutons de la souris permutés (Paramètres Windows > Bluetooth et appareils > Souris > Bouton principal : Droit) | Le clic fait avec le bouton qui est le « gauche » pour l'utilisateur donne le rendu gauche et compte dans « clics gauche » ; l'autre le rendu droit | non testé | sans objet |
-| W44 | Clic très bref (tapotement sur un pavé tactile ou une souris à très faible durée d'appui) | Constater si certains clics sont manqués (limite acceptée : appui plus court que 8 ms). Noter la proportion | non testé | non testé |
+| W44 | Clic très bref (tapotement sur un pavé tactile ou une souris à très faible durée d'appui) | Constater si certains clics sont manqués (limite acceptée : appui plus court que la période d'interrogation, 8 ms en activité, 16 ms au repos). Noter la proportion | non testé | non testé |
 | W45 | Désactivation effet par effet : Ctrl + Alt + Maj + A, T, O, S, P, chacun deux fois | Chaque raccourci coupe puis rétablit uniquement son effet (ligne « Anneau coupé », etc. dans la sonde) ; les autres ne changent pas ; effet coupé = plus d'image demandée pour lui (si tout est coupé, le nombre d'images par écran ne bouge plus). Une combinaison refusée par le système est signalée dans la sonde sans empêcher les autres | non testé | non testé |
 | W46 | Son : volume, choix, latence | Le son est audible au volume réglé ; changer `Config::son.choix` (clic, bulle, cloche) et `volume` change ce qu'on entend. Mesurer l'écart clic → son (enregistrement écran + audio, comme R10) et noter le premier son après le lancement séparément des suivants. Rapporter si la latence gêne | non testé | non testé |
 | W47 | Plusieurs écrans : clics sur chacun | L'ondulation apparaît sur l'écran où est le curseur, centrée sur le clic (à ± 1 px logique) ; un seul son par clic, quel que soit le nombre d'écrans | non testé | non testé |
@@ -527,3 +527,52 @@ Sur deux écrans externes d'échelles différentes, la résolution du portable �
 - [ ] W98 : aucune fenêtre de terminal (Windows)
 - [ ] W99 : lancement depuis un terminal (Windows)
 - [ ] W100 : fermeture par l'icône (Windows)
+
+## perf/repos-et-limites
+
+Réduction du coût au repos et des images inutiles, vérification du défaut de l'adaptateur, tableau des limites connues (`docs/ARCHITECTURE.md`, section 10). Mécanisme : `docs/ARCHITECTURE.md`, section 9, « Repos et cadence ». Au repos (rien d'animé, curseur et boutons immobiles depuis 1 s) la boucle interroge toutes les 16 ms au lieu de 8 ms ; elle revient à 8 ms au premier mouvement, appui, raccourci ou animation. Aucun seuil n'est modifié. **Rien de ce qui suit n'a tourné sous Windows ni macOS** : tout est « non testé ».
+
+**Comparer avant et après sur Windows.** Lancer l'exécutable de `main` puis celui de cette branche, mêmes conditions, et relever dans la ligne « Bilan » : temps processeur, `réveils de la boucle` et `images par écran`. La branche ajoute `dont au repos` aux réveils. Réveils par seconde = réveils ÷ durée. Attendu au repos : environ 62 réveils par seconde (contre 125), presque tous « au repos » après la première seconde.
+
+### Scénarios
+
+| # | Scénario | Attendu | Windows | macOS |
+|---|---|---|---|---|
+| W101 | Repos 60 s, tous effets actifs, 3 écrans, après 2 s sans animation : relever « Bilan » au début et à la fin | Réveils : environ 3 750 sur 60 s (contre environ 7 500 avant), presque tous « au repos » ; images par écran inchangées ; part d'un cœur logique notée pour S4 (seuil < 1 %), à comparer à `main` | non testé | non testé |
+| W102 | Reprise après repos : rester immobile 10 s, puis déplacer vite le curseur | Le projecteur et l'anneau suivent sans retard visible dès la première image. Noter à 240 images/s l'écart de la première image par rapport à `main` (attendu : au plus une image à 60 Hz de plus, une seule fois) et la cadence ensuite (identique à `main`) | non testé | non testé |
+| W103 | Clics après repos : rester immobile 10 s, puis 20 clics gauche et 10 clics droits à vitesse normale, sans bouger | « clics gauche 20, clics droit 10 » dans le bilan, une ondulation et un son par clic. Répéter avec des clics très brefs (tapotement) et noter les manqués, comparés à W44 | non testé | non testé |
+| W104 | Écran sans curseur : 3 écrans, curseur immobile sur l'écran 2, projecteur seul puis tous effets, 60 s | Les images des écrans 1 et 3 n'ont pas augmenté pendant les 60 s ; seules celles de l'écran 2 sont à noter (aucune non plus s'il est immobile) | non testé | non testé |
+| W105 | Franchissement : 3 écrans d'échelles différentes (par exemple 100 %, 150 %, 200 %), passer lentement puis vite d'un écran à l'autre, dans les deux sens, projecteur et anneau actifs | L'écran quitté perd le cercle éclairé et l'anneau aussitôt (voile plein, pas de résidu ; la traînée s'efface en sa durée de fondu) ; l'écran atteint montre le cercle et l'anneau dès l'arrivée, sans retard ni saut, centrés à ± 1 px logique. Images par écran : quelques-unes de plus pour les deux écrans concernés seulement | non testé | non testé |
+| W106 | Réactivité au repos : rester immobile 10 s, puis un raccourci d'effet, un raccourci de profil, « Réglages… » dans le menu de l'icône ; avec les réglages ouverts, faire glisser un curseur de réglage | Chaque action se voit sans retard perceptible ; l'aperçu en direct suit le glissement à la cadence habituelle (réveils non « au repos » tant que la fenêtre est ouverte) | non testé | non testé |
+| W107 | Adaptateur par défaut : (a) renommer `profils.json` et lancer ; (b) fichier de profils sans clé `adaptateur`, lancer ; (c) fichier avec `"adaptateur": "performant"` | (a) et (b) : « Sonde : adaptateur … critère : carte qui porte les écrans » (ou « choix de wgpu » sur une machine à une seule carte), jamais « réglage de l'adaptateur » ; le fichier existant n'est pas modifié sauf par l'enregistrement habituel. (c) critère « réglage de l'adaptateur (économe ou performant) », comme avant | non testé | non testé |
+
+### Visibilité dans les captures et les partages (S11) : aucune conclusion
+
+Je ne conclus rien : les résultats attendus ci-dessous sont des hypothèses à confirmer ou infirmer. Pour chaque cas, 10 s d'enregistrement avec l'anneau et le projecteur actifs, le curseur en mouvement et deux clics, en notant si les effets, le curseur matériel et la fenêtre de réglages apparaissent. Dans tous les cas, noter la version de l'outil.
+
+| # | Outil et mode | Attendu (hypothèse) | Windows | macOS |
+|---|---|---|---|---|
+| W108 | OBS, source « Capture d'affichage » (un écran entier) | Effets visibles (voile, anneau, ondulation) | non testé | non testé |
+| W109 | OBS, source « Capture de fenêtre » (une application) | Effets absents, car la surcouche est une fenêtre à part (limite à documenter) | non testé | non testé |
+| W110 | OBS, source « Capture de jeu » sur un jeu en fenêtre sans bordure | Effets absents (limite à documenter) | non testé | sans objet |
+| W111 | Zoom, partage de l'écran entier | Effets visibles pour les participants. Noter aussi le retard et la fluidité côté participant | non testé | non testé |
+| W112 | Zoom, partage d'une fenêtre d'application | Effets absents (limite à documenter) | non testé | non testé |
+| W113 | QuickTime Player, enregistrement de l'écran entier | Effets visibles | sans objet | non testé |
+| W114 | QuickTime Player, enregistrement d'une partie de l'écran | Effets visibles dans la partie enregistrée | sans objet | non testé |
+| W115 | Windows : Barre de jeu (Win + Alt + R) sur une application, puis outil Capture d'écran en mode vidéo (Win + Maj + R) | Barre de jeu : effets absents (capture d'une fenêtre). Outil de capture : effets visibles dans la zone choisie | non testé | sans objet |
+
+### Cases à cocher (perf/repos-et-limites)
+
+- [ ] W101 : réveils et processeur au repos, avant et après (Windows, macOS)
+- [ ] W102 : première image après repos (Windows, macOS)
+- [ ] W103 : aucun clic perdu après repos (Windows, macOS)
+- [ ] W104 : aucune image sur un écran sans curseur (Windows, macOS)
+- [ ] W105 : franchissement de trois écrans d'échelles différentes (Windows, macOS)
+- [ ] W106 : raccourcis, menu et réglages au repos (Windows, macOS)
+- [ ] W107 : adaptateur par défaut, profil neuf ou migré (Windows)
+- [ ] W108 à W115 : visibilité dans les captures et partages, résultat noté par outil (Windows, macOS)
+
+### Vérifications automatiques
+
+- [x] Format, lint (`-D warnings`), 109 tests, frontière système et compilation release réussissent sous Linux. Les tests de `coeur::cadence` montrent, avec une horloge simulée : 7 500 réveils sur 60 s en activité contre 3 813 au repos ; retour à 8 ms au premier signe d'activité ; aucune image sur un écran sans curseur ni animation ; franchissement entre trois écrans d'échelles 100 %, 150 % et 200 % (écran quitté effacé, écran atteint dessiné dans le même réveil). La conversion de position propre à chaque système n'y est pas exercée.
+- [ ] La CI est verte sur Windows et sur macOS.

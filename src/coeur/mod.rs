@@ -1,6 +1,7 @@
 //! Cœur : modèle indépendant du système. Testable sous Linux.
 
 pub mod activation;
+pub mod cadence;
 pub mod clic;
 pub mod config;
 pub mod ondulation;
