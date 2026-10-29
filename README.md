@@ -36,6 +36,7 @@ La fenêtre est un second programme, `souriso-reglages`, qui doit rester **dans 
 Ce dépôt est la source de vérité du projet : code, documentation, décisions, recette et installeurs.
 
 - `CLAUDE.md` : méthode de travail et règles du projet.
+- `docs/INSTALLATION.md` : installation, avertissements SmartScreen et Gatekeeper, désinstallation.
 - `docs/ARCHITECTURE.md` : choix de la base technique, risques et critères de succès.
 - `docs/RECETTE.md` : recette du produit.
 - `src/` : le programme principal (surcouche et effets) ; `reglages/` : la fenêtre de réglages (Tauri 2, page statique dans `reglages/ui/`).

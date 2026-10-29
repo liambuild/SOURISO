@@ -1,0 +1,110 @@
+name: Installateurs
+
+# Construit les installateurs (Windows : setup .exe ; macOS Apple Silicon : image .dmg) et les
+# conserve comme artefacts. Ne publie rien et n'a aucun droit d'écriture : la publication est le
+# travail du seul job « publier » de release.yml. Appelé par ci.yml (pull requests) et par
+# release.yml (tag de version).
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "Tag de version (v0.1.0) dont la version doit concorder avec le dépôt ; vide hors release."
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Installateur Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Chaîne Rust (version épinglée par rust-toolchain.toml)
+        run: rustup show
+      - name: Version (échoue si le tag et le dépôt divergent)
+        id: version
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
+        run: echo "version=$(./scripts/version.sh "$TAG")" >> "$GITHUB_OUTPUT"
+      - name: Compilation (les deux exécutables)
+        run: cargo build --release --locked --workspace
+      - name: NSIS (installé ici s'il manque sur le runner)
+        shell: pwsh
+        run: |
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) {
+            choco install nsis --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "Installation de NSIS impossible" }
+            "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+            $env:PATH += ";C:\Program Files (x86)\NSIS"
+          }
+          makensis /VERSION
+      - name: Installateur
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $racine = $env:GITHUB_WORKSPACE
+          New-Item -ItemType Directory -Force -Path "$racine\installateurs" | Out-Null
+          makensis /V2 `
+            "/DVERSION=$env:VERSION" `
+            "/DBIN=$racine\target\release" `
+            "/DICONE=$racine\reglages\icons\icon.ico" `
+            "/DSORTIE=$racine\installateurs\SOURISO-$env:VERSION-windows-x64-setup.exe" `
+            "$racine\installateur\windows\souriso.nsi"
+          if ($LASTEXITCODE -ne 0) { throw "makensis a échoué" }
+      # ── SIGNATURE WINDOWS (non active) ──────────────────────────────────────────────────
+      # C'est ici, entre la construction et la conservation de l'artefact, que viendra la
+      # signature de l'installateur (et des deux .exe, avant `makensis`, si on veut les signer).
+      # Les identifiants viendront des secrets du dépôt GitHub (jamais en clair, jamais dans le
+      # dépôt), à déclarer alors dans `on.workflow_call.secrets` et à transmettre depuis
+      # release.yml seulement : les pull requests ne signent pas. Squelette, à compléter le
+      # moment venu :
+      #
+      # - name: Signer l'installateur
+      #   if: inputs.tag != ''
+      #   shell: pwsh
+      #   env:
+      #     CERTIFICAT: ${{ secrets.SIGNATURE_WINDOWS_CERTIFICAT }}
+      #     MOT_DE_PASSE: ${{ secrets.SIGNATURE_WINDOWS_MOT_DE_PASSE }}
+      #   run: signtool sign ... installateurs\SOURISO-*-setup.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installateur-windows
+          path: installateurs/SOURISO-*-windows-x64-setup.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  macos:
+    name: Image disque macOS (Apple Silicon)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Chaîne Rust (version épinglée par rust-toolchain.toml)
+        run: rustup show
+      - name: Version (échoue si le tag et le dépôt divergent)
+        id: version
+        env:
+          TAG: ${{ inputs.tag }}
+        run: echo "version=$(./scripts/version.sh "$TAG")" >> "$GITHUB_OUTPUT"
+      - name: Compilation (les deux exécutables, arm64)
+        run: cargo build --release --locked --workspace --target aarch64-apple-darwin
+      # ── SIGNATURE ET NOTARISATION macOS (non actives) ───────────────────────────────────
+      # La signature d'identité viendra ici, avant l'image disque, dans scripts/assembler-macos.sh
+      # (aujourd'hui : signature « ad hoc » sans certificat), puis la notarisation de l'image
+      # (`xcrun notarytool`, puis `xcrun stapler`). Identifiants dans les secrets du dépôt,
+      # transmis par release.yml seulement, sur le modèle du bloc Windows ci-dessus.
+      - name: Application et image disque
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p installateurs
+          ./scripts/assembler-macos.sh "$VERSION" target/aarch64-apple-darwin/release "installateurs/SOURISO-$VERSION-macos-aarch64.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installateur-macos
+          path: installateurs/SOURISO-*-macos-aarch64.dmg
+          if-no-files-found: error
+          retention-days: 7

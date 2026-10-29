@@ -613,3 +613,42 @@ Ajout à `CLAUDE.md` (« Méthode de travail ») d'une règle de charge pour la 
 
 - [x] Frontière système, format, lint (`-D warnings`), 110 tests (deux threads) et compilation release réussissent sous Linux, lancés l'un après l'autre.
 - [ ] La CI est verte sur Windows et sur macOS.
+
+## release/installateurs
+
+Installateurs produits par la CI : un installateur Windows par utilisateur (NSIS) et une image disque macOS pour Apple Silicon, non signés. Publication par `release.yml` seulement quand le propriétaire pousse un tag `v*`. Guide pour l'utilisateur : `docs/INSTALLATION.md`.
+
+**Démarrage automatique : non implémenté.** Le code n'écrit aucune clé de démarrage ; le désinstalleur n'en nettoie donc aucune. Le jour où le démarrage automatique sera ajouté, le désinstalleur devra supprimer sa clé et un scénario devra le vérifier.
+
+Le workflow de release n'a pu être exécuté ni sous Linux ni sur la CI avant la fusion : le premier essai réel du déclenchement sur tag aura lieu au premier tag. Les étapes NSIS, `makensis`, `hdiutil`, `iconutil` et `codesign` ne tournent que sur les runners Windows et macOS.
+
+### Scénarios
+
+| # | Scénario | Attendu | Windows | macOS |
+|---|---|---|---|---|
+| W119 | Télécharger l'artefact `installateur-windows` de la PR, l'ouvrir depuis un compte Windows **standard** (sans droits administrateur) | Avertissement SmartScreen contournable par « Informations complémentaires » puis « Exécuter quand même » ; aucune invite UAC ; installation dans `%LOCALAPPDATA%\Programs\SOURISO` avec `souriso.exe`, `souriso-reglages.exe`, `souriso.ico` et `desinstaller.exe` | non testé | sans objet |
+| W120 | Après installation, ouvrir le raccourci « SOURISO » du menu Démarrer | SOURISO se lance (icône dans la zone de notification) ; « Réglages… » ouvre la fenêtre de réglages ; le raccourci porte l'icône du dépôt | non testé | sans objet |
+| W121 | Créer un profil, quitter, vérifier `%APPDATA%\SOURISO\profils.json`, désinstaller (Paramètres > Applications) | Le dossier d'installation, le raccourci et l'entrée dans Applications disparaissent ; `profils.json` est intact (même contenu) ; `HKCU\Software\SOURISO` et la clé de désinstallation sont supprimées | non testé | sans objet |
+| W122 | Réinstaller après la désinstallation de W121 | Les profils créés sont retrouvés au lancement | non testé | sans objet |
+| W123 | Installer sur une machine Windows 10 sans WebView2 (si disponible), ouvrir les réglages | Aucun téléchargement pendant l'installation (observer le réseau) ; message natif signalant l'absence de WebView2 à l'ouverture des réglages ; SOURISO continue de fonctionner | non testé | sans objet |
+| W124 | Installer par-dessus une version déjà installée alors que SOURISO tourne | Comportement observé et noté (fichier en cours d'usage) ; à documenter si l'installation échoue | non testé | sans objet |
+| M119 | Télécharger l'artefact `installateur-macos` de la PR sur un Mac Apple Silicon, ouvrir le `.dmg` | L'image contient `SOURISO.app` et un alias vers Applications ; glisser l'application dans Applications fonctionne | sans objet | non testé |
+| M120 | Premier lancement de SOURISO depuis Applications | Blocage Gatekeeper ; le chemin de `docs/INSTALLATION.md` (Réglages Système > Confidentialité et sécurité > Ouvrir quand même) permet de lancer ; pas d'icône dans le Dock, icône dans la barre de menus ; `Contents/MacOS` contient `souriso` et `souriso-reglages` | sans objet | non testé |
+| M121 | « Réglages… » depuis la barre de menus, puis quitter, vérifier `~/Library/Application Support/SOURISO/profils.json`, supprimer l'application | La fenêtre de réglages s'ouvre (le second exécutable est trouvé) ; après suppression de l'application, `profils.json` est intact | sans objet | non testé |
+| M122 | `file SOURISO.app/Contents/MacOS/*` et `codesign -dv SOURISO.app` | Exécutables arm64 ; signature « ad hoc » seulement (pas d'identité) | sans objet | non testé |
+| X1 | Poids des fichiers publiés | Chaque installateur ≤ 25 Mo (S7) ; relever la taille réelle | non testé | non testé |
+
+### Cases à cocher (release/installateurs)
+
+- [ ] W119 à W124 : installation sans droits administrateur, lancement, désinstallation, profils conservés (Windows)
+- [ ] M119 à M122 : installation, Gatekeeper, lancement, profils conservés (macOS Apple Silicon)
+- [ ] X1 : poids des installateurs
+- [ ] Sur la PR, la CI construit `installateur-windows` et `installateur-macos` comme artefacts, sans créer de release
+- [ ] `release.yml` ne se déclenche que sur un tag `v*` ; un tag discordant avec la version du dépôt fait échouer le workflow avant toute publication (premier tag)
+- [ ] Aucun secret dans le dépôt ni en clair dans les workflows
+
+### Vérifications automatiques
+
+- [x] `scripts/version.sh` : affiche `0.1.0` ; échoue pour le tag `v0.2.0` (Linux).
+- [x] Les trois workflows se lisent comme du YAML valide (Linux). Non exécutés.
+- [ ] La CI est verte sur Windows et sur macOS, installateurs compris.
