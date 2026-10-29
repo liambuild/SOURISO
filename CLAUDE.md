@@ -22,6 +22,7 @@
 - Toute modification se termine par `/cloturer` et une merge request vers `main`.
 - Tu ne merges jamais.
 - Tu ne lis ni n'affiches jamais un secret, un certificat ou un jeton.
+- Charge de la machine : la machine de travail est une VM limitée qui a déjà décroché sous charge. Aucune boucle de tests au-delà de dix passages complets, au plus deux tests en parallèle, jamais de compilation et de tests simultanés. Si la machine ralentit nettement, tu t'arrêtes et tu me le signales au lieu d'insister.
 - Si une consigne contredit le code, tu t'arrêtes et tu me le signales.
 - Avant de modifier tout ce qui touche aux permissions système, à la signature ou à la publication, tu me rapportes ton constat.
 

@@ -599,3 +599,17 @@ L'onglet « Carte graphique » de la fenêtre de réglages affichait le mot « n
 
 - [x] Test du cœur : chacun des trois choix est écrit dans le fichier puis relu tel quel, en partant d'un autre choix. Essai de la page : aucun « null » affiché, avec ou sans variable d'imposition, et la ligne d'imposition est celle attendue (échoue sans le correctif).
 - [ ] La CI est verte sur Windows et sur macOS.
+
+## docs/regle-vm
+
+Ajout à `CLAUDE.md` (« Méthode de travail ») d'une règle de charge pour la machine de travail, une VM limitée qui a déjà décroché sous charge : pas plus de dix passages complets de tests en boucle, deux tests en parallèle au plus, jamais de compilation et de tests simultanés, arrêt et signalement si la machine ralentit nettement. Aucun code ni comportement de l'application ne change.
+
+### À tester
+
+- [ ] `CLAUDE.md` contient la règle « Charge de la machine » une seule fois, dans « Méthode de travail », avec les quatre limites (dix passages, deux tests en parallèle, pas de compilation et tests simultanés, arrêt et signalement en cas de ralentissement).
+- [ ] Aucun autre fichier que `CLAUDE.md` et `docs/RECETTE.md` ne change dans la merge request.
+
+### Vérifications automatiques
+
+- [x] Frontière système, format, lint (`-D warnings`), 110 tests (deux threads) et compilation release réussissent sous Linux, lancés l'un après l'autre.
+- [ ] La CI est verte sur Windows et sur macOS.
