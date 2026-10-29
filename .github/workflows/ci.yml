@@ -44,3 +44,9 @@ jobs:
             target/release/souriso-reglages.exe
           if-no-files-found: error
           retention-days: 7
+
+  installateurs:
+    name: Installateurs
+    needs: verifier
+    # Construit les installateurs comme artefacts de la PR : aucune release, aucun droit d'écriture.
+    uses: ./.github/workflows/installateurs.yml
