@@ -652,3 +652,29 @@ Le workflow de release n'a pu être exécuté ni sous Linux ni sur la CI avant l
 - [x] `scripts/version.sh` : affiche `0.1.0` ; échoue pour le tag `v0.2.0` (Linux).
 - [x] Les trois workflows se lisent comme du YAML valide (Linux). Non exécutés.
 - [ ] La CI est verte sur Windows et sur macOS, installateurs compris.
+
+## fix/profil-reinitialise
+
+Après avoir désactivé des effets dans un profil depuis la fenêtre de réglages puis relancé SOURISO, tous les effets étaient réactivés. Cause : le fichier `profils.json` était correct (activation écrite, relue, jamais écrasée), mais au lancement l'état des effets de la session partait de « tout actif » sans appliquer l'activation du profil restauré ; seul un changement de profil l'appliquait. `App` applique maintenant l'activation du profil actif au démarrage. Le format du fichier ne change pas (le format 2 date déjà de la v0.1.0) : aucun profil déjà enregistré n'est touché.
+
+### Scénarios
+
+| # | Scénario | Attendu | Windows | macOS |
+|---|---|---|---|---|
+| W125 / M123 | Dans le profil « Par défaut », désactiver le son, l'anneau et le projecteur depuis la fenêtre de réglages, fermer la fenêtre, quitter par « Quitter SOURISO » de l'icône de la zone de notification (barre de menus sous macOS), relancer SOURISO | Le son, l'anneau et le projecteur sont toujours désactivés (pas de voile, pas d'anneau, clic muet) ; la traînée et l'ondulation sont actives ; leurs interrupteurs dans la fenêtre de réglages sont dans le même état | non testé | non testé |
+| W126 / M124 | Même scénario pour « Présentation » puis « Enregistrement » (passer au profil, désactiver un seul effet, quitter, relancer : le profil est restauré avec cet effet désactivé), pour chacun des cinq effets | Seul l'effet désactivé reste désactivé, dans chaque profil | non testé | non testé |
+| W127 / M125 | Après W125, passer à un autre profil puis revenir | Chaque profil retrouve sa propre activation | non testé | non testé |
+| W128 / M126 | Désactiver un effet, puis arrêter SOURISO autrement que par l'icône (fin de tâche, `kill`), dans les quelques secondes qui suivent le réglage, puis relancer | Observer et noter : le réglage est écrit environ 300 ms après le dernier changement ; un arrêt forcé avant ce délai peut le perdre (comportement connu, hors cette correction) | non testé | non testé |
+| W129 / M127 | Avec le fichier `profils.json` déjà écrit par la v0.1.0 (format 2, un ou plusieurs effets désactivés dans un profil), installer cette version par-dessus et lancer | Les effets désactivés le restent ; le contenu du fichier est inchangé après le lancement (aucune copie `.v1` ni `.corrompu` créée) | non testé | non testé |
+| W130 / M128 | Raccourcis d'effet (P, A, T, O, S) : réactiver un effet par raccourci après la relance de W125, quitter, relancer | Le raccourci ne dure que la session : à la relance, l'activation du profil est de nouveau celle de W125 | non testé | non testé |
+
+### Cases à cocher (fix/profil-reinitialise)
+
+- [ ] W125 à W130 (Windows)
+- [ ] M123 à M128 (macOS)
+
+### Vérifications automatiques
+
+- [x] Quatre tests de `app::tests` échouent avant la correction (effets tous actifs après relance) et passent après : chacun des cinq effets coupé seul dans chacun des trois profils, trois effets coupés ensemble dans « Par défaut », deux lancements successifs sans réécriture du fichier, fichier au format 2 de la v0.1.0.
+- [x] Frontière système, format, lint (`-D warnings`), 114 tests et compilation release réussissent sous Linux, lancés l'un après l'autre.
+- [ ] La CI est verte sur Windows et sur macOS.
