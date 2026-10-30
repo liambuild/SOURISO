@@ -678,3 +678,15 @@ Après avoir désactivé des effets dans un profil depuis la fenêtre de réglag
 - [x] Quatre tests de `app::tests` échouent avant la correction (effets tous actifs après relance) et passent après : chacun des cinq effets coupé seul dans chacun des trois profils, trois effets coupés ensemble dans « Par défaut », deux lancements successifs sans réécriture du fichier, fichier au format 2 de la v0.1.0.
 - [x] Frontière système, format, lint (`-D warnings`), 114 tests et compilation release réussissent sous Linux, lancés l'un après l'autre.
 - [ ] La CI est verte sur Windows et sur macOS.
+
+## docs/readme
+
+Nouveau `README.md` de présentation et cinq captures de la fenêtre de réglages (`docs/images/`). Aucun code ne change. Les trois visuels de la démonstration, des clics et des profils manquent encore : ces sections n'ont pas d'image.
+
+### Cases à cocher (docs/readme)
+
+- [ ] Sur la page du dépôt GitHub, l'en-tête est centré et les deux badges (CI, dernière release) s'affichent avec leur état.
+- [ ] Les cinq captures s'affichent et le tableau 2 × 2 est lisible, y compris sur un écran étroit.
+- [ ] Les liens vers `docs/INSTALLATION.md`, `docs/RECETTE.md`, `docs/ARCHITECTURE.md` et la page des releases s'ouvrent.
+- [ ] Les raccourcis des profils (D, E, R, N) et des effets (P, A, T, O, S) cités correspondent à ceux de la fenêtre de réglages (Windows, macOS).
+- [ ] Les chiffres de la section « Légèreté » sont identiques à ceux de `docs/ARCHITECTURE.md`, section 10 (S3).
