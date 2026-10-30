@@ -1,6 +1,6 @@
 [package]
 name = "souriso-reglages"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 publish = false
 description = "Fenêtre de réglages de SOURISO : une page web embarquée, sans réseau, qui parle au processus principal par ses entrée et sortie standard."
