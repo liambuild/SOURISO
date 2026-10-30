@@ -690,3 +690,14 @@ Nouveau `README.md` de présentation et cinq captures de la fenêtre de réglage
 - [ ] Les liens vers `docs/INSTALLATION.md`, `docs/RECETTE.md`, `docs/ARCHITECTURE.md` et la page des releases s'ouvrent.
 - [ ] Les raccourcis des profils (D, E, R, N) et des effets (P, A, T, O, S) cités correspondent à ceux de la fenêtre de réglages (Windows, macOS).
 - [ ] Les chiffres de la section « Légèreté » sont identiques à ceux de `docs/ARCHITECTURE.md`, section 10 (S3).
+
+## chore/v1-0-0
+
+Passage de la version à 1.0.0 (`Cargo.toml`, `reglages/Cargo.toml`, `reglages/tauri.conf.json`, `Cargo.lock`) et règle de `CLAUDE.md` assouplie : le tag n'est créé que sur demande explicite du propriétaire, après le merge de ce changement.
+
+### Cases à cocher (chore/v1-0-0)
+
+- [ ] `./scripts/version.sh` affiche `1.0.0` et `./scripts/version.sh v1.0.0` réussit sur `main` après le merge.
+- [ ] La CI est verte sur Windows et sur macOS.
+- [ ] Le tag `v1.0.0` déclenche `release.yml` ; les noms des installateurs publiés portent `1.0.0` (Windows et macOS).
+- [ ] L'installateur Windows affiche la version 1.0.0 dans Paramètres > Applications.
