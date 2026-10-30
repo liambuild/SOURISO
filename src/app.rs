@@ -160,6 +160,12 @@ impl App {
     pub fn new(debut: Instant) -> Self {
         let chemin_profils =
             plateforme::dossier_donnees().map(|dossier| dossier.join(stockage::NOM_FICHIER));
+        Self::depuis_fichier(debut, chemin_profils)
+    }
+
+    /// Démarre avec les profils lus dans `chemin_profils` (`None` : profils d'exemple, rien ne
+    /// sera enregistré).
+    fn depuis_fichier(debut: Instant, chemin_profils: Option<PathBuf>) -> Self {
         let chargement = match &chemin_profils {
             Some(chemin) => stockage::charger(chemin),
             None => Chargement {
@@ -181,6 +187,10 @@ impl App {
         };
         let mut sons = HashMap::new();
         let son = son_pour(&mut sons, config.effets.son);
+        // L'activation enregistrée dans le profil restauré s'applique dès le lancement, comme au
+        // passage à ce profil.
+        let mut activations = Activations::default();
+        activations.appliquer(&profils.profil_actif().actifs);
         let app = App {
             config,
             profils,
@@ -189,7 +199,7 @@ impl App {
             sons,
             derniere_bascule_profil: None,
             changements_profil: 0,
-            activations: Activations::default(),
+            activations,
             surcouches: Vec::new(),
             icone: None,
             raccourci: None,
@@ -1014,5 +1024,111 @@ impl Drop for App {
     /// Les réglages encore en attente sont écrits avant de quitter.
     fn drop(&mut self) {
         self.enregistrer_si_prevu();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::coeur::activation::{ActifsProfil, NOMS};
+    use crate::coeur::profil::VERSION_FORMAT;
+
+    struct Dossier(PathBuf);
+
+    impl Dossier {
+        fn new(nom: &str) -> Self {
+            let d = std::env::temp_dir().join(format!("souriso-app-{}-{nom}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&d);
+            std::fs::create_dir_all(&d).unwrap();
+            Dossier(d)
+        }
+
+        fn fichier(&self) -> PathBuf {
+            self.0.join(stockage::NOM_FICHIER)
+        }
+    }
+
+    impl Drop for Dossier {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// Les effets que la session applique au lancement, pour ce fichier.
+    fn au_lancement(d: &Dossier) -> App {
+        App::depuis_fichier(Instant::now(), Some(d.fichier()))
+    }
+
+    #[test]
+    fn chaque_effet_coupe_dans_chaque_profil_reste_coupe_apres_relance() {
+        for profil in 0..3 {
+            for coupe in NOMS {
+                let d = Dossier::new(&format!("un-effet-{profil}-{coupe}"));
+                // Session 1 : réglage depuis la fenêtre (même chemin que l'interrupteur), quitter.
+                let mut profils = Profils::default();
+                profils.activer(profil).unwrap();
+                reglages::regler(
+                    &mut profils.profils[profil],
+                    &format!("actif.{coupe}"),
+                    &serde_json::json!(false),
+                )
+                .unwrap();
+                stockage::enregistrer(&d.fichier(), &profils).unwrap();
+                // Session 2 : relance.
+                let app = au_lancement(&d);
+                for nom in NOMS {
+                    assert_eq!(
+                        app.activations.est_actif(nom),
+                        nom != coupe,
+                        "profil {profil}, seul « {coupe} » coupé : « {nom} » après relance"
+                    );
+                }
+                assert_eq!(app.activations.actifs(), app.profils.profil_actif().actifs);
+            }
+        }
+    }
+
+    #[test]
+    fn plusieurs_effets_coupes_dans_le_profil_par_defaut_le_restent_apres_relance() {
+        let d = Dossier::new("plusieurs");
+        let mut profils = Profils::default();
+        for nom in ["son", "anneau", "projecteur"] {
+            profils.profils[0].actifs.definir(nom, false);
+        }
+        stockage::enregistrer(&d.fichier(), &profils).unwrap();
+        let app = au_lancement(&d);
+        let attendu = ActifsProfil {
+            projecteur: false,
+            anneau: false,
+            son: false,
+            ..ActifsProfil::default()
+        };
+        assert_eq!(app.activations.actifs(), attendu);
+        assert_eq!(app.profils.profil_actif().actifs, attendu);
+    }
+
+    #[test]
+    fn la_relance_ne_reecrit_pas_le_fichier_et_garde_les_effets_coupes_au_second_lancement() {
+        let d = Dossier::new("deux-lancements");
+        let mut profils = Profils::default();
+        profils.profils[0].actifs.son = false;
+        stockage::enregistrer(&d.fichier(), &profils).unwrap();
+        let octets = std::fs::read(d.fichier()).unwrap();
+        drop(au_lancement(&d));
+        assert_eq!(std::fs::read(d.fichier()).unwrap(), octets);
+        assert!(!au_lancement(&d).activations.est_actif(SON));
+    }
+
+    #[test]
+    fn un_fichier_ecrit_par_la_v0_1_0_garde_ses_effets_coupes() {
+        // Format 2 déjà en v0.1.0 : un seul effet coupé dans le profil « Par défaut ».
+        assert_eq!(VERSION_FORMAT, 2);
+        let d = Dossier::new("v0-1-0");
+        let mut profils = Profils::default();
+        profils.profils[0].actifs.anneau = false;
+        stockage::enregistrer(&d.fichier(), &profils).unwrap();
+        let app = au_lancement(&d);
+        assert!(!app.activations.est_actif(ANNEAU));
+        assert!(app.activations.est_actif(PROJECTEUR));
     }
 }
